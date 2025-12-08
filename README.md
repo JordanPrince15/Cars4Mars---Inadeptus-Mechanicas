@@ -30,7 +30,7 @@ Our team is developing a modular rover platform using affordable components, rob
 - Geared drivetrain for torque-heavy terrain  
 
 ### 🔹 **2. Chassis & Frame**
-- PVC/aluminium hybrid structure  
+- PVC structure  
 - Shock-absorbing mounts  
 - Weatherproof electronics housing  
 - Custom 3D printed brackets and mounts  
@@ -44,9 +44,6 @@ Our team is developing a modular rover platform using affordable components, rob
 ### 🔹 **4. Sensors**
 - IMU (MPU6050 / MPU9250 / BNO055)  
 - Lidar / TOF sensor for mapping  
-- Ultrasonic & IR sensors for obstacle detection  
-- GPS module (navigation)  
-- Soil moisture / pH sensor (science payload)
 
 ### 🔹 **5. Communications**
 - HC-12 long-range 433MHz telemetry  
