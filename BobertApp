@@ -1,0 +1,324 @@
+# # # # BobertApp.py
+
+# # # import serial
+# # # import serial.tools.list_ports
+# # # from direct.showbase.ShowBase import ShowBase
+# # # from direct.gui.OnscreenImage import OnscreenImage
+# # # from panda3d.core import TransparencyAttrib, CardMaker, NodePath
+# # # from direct.task import Task
+# # # from robot_simulator import RobotSimulator  # <-- Import your simulator
+
+# # # BT_PORT = "COM6"
+# # # BAUD = 9600
+
+# # # class BobertApp(ShowBase):
+# # #     def __init__(self):
+# # #         ShowBase.__init__(self)
+
+# # #         self.bt = self.init_bt_connection()
+
+# # #         self.accept("f", self.send_cmd, ['F'])
+# # #         self.accept("b", self.send_cmd, ['B'])
+# # #         self.accept("s", self.send_cmd, ['S'])
+# # #         self.accept("escape", self.cleanup)
+
+# # #         self.draw_bottom_bar()
+
+# # #         self.bt_icon = OnscreenImage(image="disconnected.png", pos=(0, 0, -0.9), scale=0.05)
+# # #         self.bt_icon.setTransparency(TransparencyAttrib.MAlpha)
+
+# # #         self.taskMgr.doMethodLater(1.0, self.update_bt_status, "BTStatusTask")
+
+# # #         # ⬇️ Run your real simulator
+# # #         self.sim = RobotSimulator(self)
+# # #         self.taskMgr.add(self.sim.update, "SimUpdateTask")
+
+# # #     def draw_bottom_bar(self):
+# # #         from panda3d.core import CardMaker, TransparencyAttrib
+
+# # #         cm = CardMaker("bottom-bar")
+        
+# # #         # Draw a horizontal bar along the bottom of the screen
+# # #         cm.setFrame(-1.33, 1.33, -1.0, -0.85)  # (left, right, bottom, top)
+# # #         self.bt_icon = OnscreenImage(image="disconnected.png", pos=(0, 0, -0.93), scale=0.05, parent=self.aspect2d)
+# # #         self.bt_icon.setTransparency(TransparencyAttrib.MAlpha)
+# # #         bar = self.aspect2d.attachNewNode(cm.generate())
+# # #         bar.setColor(1, 0, 0, 1)  # Bright red
+# # #         bar.setTransparency(TransparencyAttrib.MAlpha)
+# # #         bar.setBin("background", 0)
+# # #         bar.setDepthWrite(False)
+
+
+# # #     def init_bt_connection(self):
+# # #         try:
+# # #             bt = serial.Serial(BT_PORT, BAUD, timeout=1)
+# # #             print("Connected to Bluetooth.")
+# # #             return bt
+# # #         except Exception as e:
+# # #             print("Bluetooth connection failed:", e)
+# # #             return None
+
+# # #     def check_hc05_connected(self):
+# # #         ports = list(serial.tools.list_ports.comports())
+# # #         for p in ports:
+# # #             if "HC-05" in p.description or "Bluetooth" in p.description:
+# # #                 return True
+# # #         return False
+
+# # #     def update_bt_status(self, task):
+# # #         connected = self.check_hc05_connected()
+# # #         icon_path = "connected.png" if connected else "disconnected.png"
+# # #         self.bt_icon.setImage(icon_path)
+# # #         return task.again
+
+# # #     def send_cmd(self, cmd):
+# # #         print("Sending:", cmd)
+# # #         if self.bt and self.bt.is_open:
+# # #             self.bt.write(cmd.encode())
+
+# # #     def cleanup(self):
+# # #         print("Quitting...")
+# # #         if self.bt and self.bt.is_open:
+# # #             self.bt.close()
+# # #         self.userExit()
+
+# # # app = BobertApp()
+# # # app.run()
+
+# # # BobertApp.py
+
+# # import serial
+# # import serial.tools.list_ports
+
+# # from direct.showbase.ShowBase import ShowBase
+# # from direct.task import Task
+# # from direct.gui.DirectGui import DirectFrame
+# # from direct.gui.OnscreenImage import OnscreenImage
+# # from panda3d.core import TransparencyAttrib
+
+# # from robot_simulator import RobotSimulator  # <- Your simulator class
+
+# # BT_PORT = "COM6"
+# # BAUD = 9600
+
+
+# # class BobertApp(ShowBase):
+# #     def __init__(self):
+# #         ShowBase.__init__(self)
+
+# #         # 🟦 Set background color of the entire window (in case of gaps)
+# #         self.setBackgroundColor(0.2, 0.2, 0.25, 1)
+
+# #         # ✅ Create a centered display region for the 3D simulation
+# #         self.create_center_render_window()
+
+# #         # ✅ Connect to HC-05 (if available)
+# #         self.bt = self.init_bt_connection()
+
+# #         # ✅ Controls
+# #         self.accept("f", self.send_cmd, ['F'])  # Forward
+# #         self.accept("b", self.send_cmd, ['B'])  # Backward
+# #         self.accept("s", self.send_cmd, ['S'])  # Stop
+# #         self.accept("escape", self.cleanup)
+
+# #         # ✅ GUI setup
+# #         self.draw_bottom_bar()
+# #         self.create_bt_status_icon()
+
+# #         # ✅ Check Bluetooth status repeatedly
+# #         self.taskMgr.doMethodLater(1.0, self.update_bt_status, "BTStatusTask")
+
+# #         # ✅ Load your simulation
+# #         self.sim = RobotSimulator(self)
+# #         self.taskMgr.add(self.sim.update, "SimUpdateTask")
+
+# #     def create_center_render_window(self):
+# #         """Create a centered window for 3D rendering."""
+# #         dr = self.win.makeDisplayRegion(0.05, 0.95, 0.2, 1.0)  # (left, right, bottom, top)
+# #         dr.setSort(20)
+# #         dr.setClearColorActive(True)
+# #         dr.setClearColor((0.1, 0.1, 0.1, 1))
+# #         dr.setCamera(self.cam)  # Attach the main camera to this region
+
+# #     def draw_bottom_bar(self):
+# #         """Create the white status bar below the 3D view."""
+# #         self.bottom_bar = DirectFrame(
+# #             frameColor=(1, 1, 1, 1),  # White
+# #             frameSize=(-1.33, 1.33, -1.0, -0.85),
+# #             parent=self.aspect2d
+# #         )
+
+# #     def create_bt_status_icon(self):
+# #         """Add Bluetooth status icon to bottom bar."""
+# #         self.bt_icon = OnscreenImage(
+# #             image="disconnected.png", pos=(-1.2, 0, -0.93),
+# #             scale=0.05, parent=self.aspect2d
+# #         )
+# #         self.bt_icon.setTransparency(TransparencyAttrib.MAlpha)
+
+# #     def init_bt_connection(self):
+# #         """Try to connect to the Bluetooth module."""
+# #         try:
+# #             bt = serial.Serial(BT_PORT, BAUD, timeout=1)
+# #             print("Connected to Bluetooth.")
+# #             return bt
+# #         except Exception as e:
+# #             print("Bluetooth connection failed:", e)
+# #             return None
+
+# #     def check_hc05_connected(self):
+# #         """Scan available COM ports to check if HC-05 is connected."""
+# #         ports = list(serial.tools.list_ports.comports())
+# #         for p in ports:
+# #             if "HC-05" in p.description or "Bluetooth" in p.description:
+# #                 return True
+# #         return False
+
+# #     def update_bt_status(self, task):
+# #         """Update the Bluetooth icon based on connection status."""
+# #         connected = self.check_hc05_connected()
+# #         icon_path = "connected.png" if connected else "disconnected.png"
+# #         self.bt_icon.setImage(icon_path)
+# #         return task.again
+
+# #     def send_cmd(self, cmd):
+# #         print("Sending:", cmd)
+# #         if self.bt and self.bt.is_open:
+# #             self.bt.write(cmd.encode())
+
+# #     def cleanup(self):
+# #         print("Quitting...")
+# #         if self.bt and self.bt.is_open:
+# #             self.bt.close()
+# #         self.userExit()
+
+
+# # app = BobertApp()
+# # app.run()
+
+# import tkinter as tk
+# from direct.showbase.ShowBase import ShowBase
+# from panda3d.core import WindowProperties
+# import threading
+
+
+# class Bobert3D(ShowBase):
+#     def __init__(self, window_id):
+#         # Prevent opening default Panda window
+#         self.windowType = 'none'
+#         ShowBase.__init__(self)
+
+#         # Attach Panda to the given tkinter frame
+#         wp = WindowProperties()
+#         wp.setOrigin(0, 0)
+#         wp.setSize(800, 600)
+#         wp.setParentWindow(window_id)
+
+#         self.makeDefaultPipe()
+#         self.openDefaultWindow(props=wp, gsg=None)
+
+#         # Optional: set background color
+#         self.setBackgroundColor(0.1, 0.1, 0.2, 1)
+
+#         # Load test model (replace with your sim)
+#         self.model = self.loader.loadModel("models/environment")
+#         self.model.reparentTo(self.render)
+#         self.model.setScale(0.1)
+
+
+# def run_panda_in_thread(window_id):
+#     app = Bobert3D(window_id)
+#     app.run()
+
+
+# # --------- TKINTER MAIN WINDOW ----------
+
+# root = tk.Tk()
+# root.title("Bobert Control Panel")
+# root.geometry("1000x700")
+
+# # 🖼️ Top: Panda3D rendering frame
+# panda_frame = tk.Frame(root, width=800, height=600, bg="black")
+# panda_frame.pack(pady=10)
+
+# # ✅ Bottom: Status bar
+# status_frame = tk.Frame(root, height=50, bg="white")
+# status_frame.pack(fill="x")
+
+# bt_label = tk.Label(status_frame, text="Bluetooth: 🔴 Disconnected", bg="white", fg="red", font=("Arial", 12))
+# bt_label.pack(side="left", padx=20)
+
+# # Start Panda3D in a thread
+# panda_thread = threading.Thread(target=run_panda_in_thread, args=(panda_frame.winfo_id(),))
+# panda_thread.start()
+
+# root.mainloop()
+
+import tkinter as tk
+from panda3d.core import WindowProperties, loadPrcFileData
+from direct.showbase.ShowBase import ShowBase
+import threading
+import time
+from robot_simulator import RobotSimulator
+
+#I don't want Panda3D to open a window automatically
+loadPrcFileData('','window-type none')
+
+class Bobert3D(ShowBase):
+    def __init__(self, window_id):
+        ShowBase.__init__(self)
+        # ShowBase.ShowBase._init_(self)
+        # # Prevent Panda3D from opening its own window
+        # self.windowType = 'none'
+        # ShowBase.__init__(self)
+
+        # Set Panda window inside tkinter frame
+        wp = WindowProperties()
+        wp.setOrigin(0, 0)
+        wp.setSize(800, 600)
+        wp.setParentWindow(window_id)
+
+        self.makeDefaultPipe()
+        self.openDefaultWindow(props=wp, gsg=None)
+
+        self.setBackgroundColor(0.1, 0.1, 0.2, 1)
+
+        # 🔁 Launch robot simulation inside this Panda3D app
+        self.sim = RobotSimulator(self)
+
+
+def run_panda3d(window_id):
+    app = Bobert3D(window_id)
+    while True:                 
+        app.taskMgr.step()  # ✅ Safe in background thread
+        time.sleep(0.01)
+
+
+def main():
+    root = tk.Tk()
+    root.title("Bobert Robot Controller")
+    root.geometry("1000x700")
+
+        # 🎥 Panda3D rendering area
+    panda_frame = tk.Frame(root, width=800, height=600, bg="black")
+    panda_frame.pack(pady=10)
+
+        # 🔻 Bottom bar for status indicators
+    bottom_bar = tk.Frame(root, height=50, bg="white")
+    bottom_bar.pack(fill="x")
+
+        # 🔴 Bluetooth status label
+    bt_label = tk.Label(bottom_bar, text="Bluetooth: 🔴 Disconnected", font=("Arial", 12), bg="white", fg="red")
+    bt_label.pack(side="left", padx=20)
+
+        # 🚀 Run Panda3D in a background thread
+    panda_thread = threading.Thread(target= run_panda3d, args=(panda_frame.winfo_id(),))
+    panda_thread.daemon = True
+    panda_thread.start()
+
+        # 🪟 Launch tkinter GUI
+    root.mainloop()
+
+
+if __name__ == "__main__":
+    main()
