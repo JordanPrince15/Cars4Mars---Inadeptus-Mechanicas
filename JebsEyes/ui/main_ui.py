@@ -1,90 +1,3 @@
-# # import tkinter as tk
-# # from panda_panel import PandaApp
-
-# # def main():
-# #     root = tk.Tk()
-# #     root.title("Rover Mission Control")
-# #     root.geometry("1200x700")
-# #     root.configure(bg="white")
-
-# #     # Left: video / UI placeholder
-# #     left_frame = tk.Frame(root, width=800, height=700, bg="white")
-# #     left_frame.pack(side="left", fill="both", expand=True)
-
-# #     status = tk.Label(
-# #         left_frame,
-# #         text="WiFi: ● Connected | Battery: 100% | Telemetry: OK",
-# #         font=("Arial", 12),
-# #         bg="white"
-# #     )
-# #     status.pack(pady=10)
-
-# #     video_placeholder = tk.Label(
-# #         left_frame,
-# #         text="VIDEO FEED",
-# #         bg="#eaeaea",
-# #         width=80,
-# #         height=25
-# #     )
-# #     video_placeholder.pack(padx=20, pady=20)
-
-# #     # Right: Panda3D panel
-# #     panda_frame = tk.Frame(root, width=400, height=700, bg="black")
-# #     panda_frame.pack(side="right", fill="y")
-
-# #     root.update()  # ensure winfo_id exists
-
-# #     panda = PandaApp(panda_frame.winfo_id())
-
-# #     root.mainloop()
-
-
-# # if __name__ == "__main__":
-# #     main()
-
-# import tkinter as tk
-# from panda_panel import PandaApp
-
-# def main():
-#     root = tk.Tk()
-#     root.title("Rover Mission Control")
-#     root.geometry("1200x700")
-#     root.configure(bg="white")
-
-#     # LEFT PANEL (video + status)
-#     left_frame = tk.Frame(root, bg="white")
-#     left_frame.pack(side="left", fill="both", expand=True)
-
-#     status = tk.Label(
-#         left_frame,
-#         text="WiFi: ● Connected | Battery: 100% | Telemetry: OK",
-#         font=("Arial", 12),
-#         bg="white"
-#     )
-#     status.pack(pady=10)
-
-#     video_placeholder = tk.Label(
-#         left_frame,
-#         text="VIDEO FEED",
-#         bg="#5b4d4d",
-#         width=80,
-#         height=25
-#     )
-#     video_placeholder.pack(padx=20, pady=20)
-
-#     # RIGHT PANEL (Panda3D)
-#     panda_frame = tk.Frame(root, width=400, bg="black")
-#     panda_frame.pack(side="right", fill="y")
-
-#     root.update()  # IMPORTANT: ensures winfo_id exists
-
-#     PandaApp(panda_frame.winfo_id(), root)
-
-#     root.mainloop()
-
-# if __name__ == "__main__":
-#     main()
-
 import tkinter as tk
 from PIL import Image, ImageTk
 import cv2
@@ -92,6 +5,7 @@ import threading
 
 from JebsEyes.robot_state import RobotState
 from JebsEyes.test_main import vision_loop
+from JebsEyes.ui.panda_panel import PandaApp
 
 
 class RoverUI:
@@ -99,7 +13,7 @@ class RoverUI:
         self.root = root
         self.root.title("Rover Mission Control")
         self.root.geometry("1000x700")
-        self.root.configure(bg="white")
+        self.root.configure(bg="lightgray")
 
         # Shared state
         self.state = RobotState()
@@ -113,17 +27,28 @@ class RoverUI:
         )
         self.vision_thread.start()
 
-        # --- UI Layout ---
-        self.video_label = tk.Label(root, bg="black")
+            # --- LEFT PANEL (Video) ---
+        left_frame = tk.Frame(root, bg="white")
+        left_frame.pack(side="left", fill="both", expand=True)
+
+        self.video_label = tk.Label(left_frame, bg="black")
         self.video_label.pack(padx=20, pady=20)
 
         self.status = tk.Label(
-            root,
+            left_frame,
             text="WiFi: ● Connected | Battery: 100% | Telemetry: OK",
             font=("Arial", 12),
             bg="white"
         )
         self.status.pack()
+
+         # --- RIGHT PANEL (Panda3D) ---
+        panda_frame = tk.Frame(root, width=400, bg="black")
+        panda_frame.pack(side="right", fill="y")
+
+        # Initialize Panda3D inside the frame
+        self.panda = PandaApp(panda_frame.winfo_id(), root)
+
 
         # Start UI update loop
         self.update_ui()
@@ -146,7 +71,13 @@ class RoverUI:
                     "y": y,
                     "size": 20,
                     "confidence": confidence
-                }   
+                }  
+
+                px = (x - 320/2) / 10
+                py = (y - 240/2) / 10
+                self.panda.sim.set_ball_position(px, py, 0.5)
+            else:
+                self.panda.sim.ball_node.hide() # Hide ball if not detected
 
         if frame is not None:
             # Draw overlay (UI-side, not vision-side)

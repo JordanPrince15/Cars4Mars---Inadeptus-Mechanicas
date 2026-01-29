@@ -1,0 +1,1 @@
+from JebsEyes.ui.panda_panel import PandaApp
