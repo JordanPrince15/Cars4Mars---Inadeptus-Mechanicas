@@ -1,436 +1,827 @@
-# import cv2
-# import time
-# import serial
-# from hsv_ball import detect_tennis_ball_via_colour
-# from yolo_ball import TennisBallDetector
-# from fusion import fuse_detections
-# from network_camera import NetworkCamera
-
-# # -------------------------------
-# # INITIALIZE DETECTORS
-# # -------------------------------
-# tennis_detector = TennisBallDetector()
-# frame_count = 0
-# YOLO_INTERVAL = 5  # run YOLO every 5 frames
-# last_yolo_ball = None
-
-# try:
-#     pico = serial.Serial("COM7", 115200, timeout=1)
-#     print("✅ Pico Connected")
-# except Exception as e:
-#     pico = None
-#     print(f"⚠️ Pico disconnected ({e}). Running vision loop in simulation mode.")
-# # -------------------------------
-# # CONNECT TO NETWORK CAMERA
-# # -------------------------------
-# net_cam = NetworkCamera(pi_ip="192.168.1.154", port=6000)
-
-# last_time = time.time()
-# fps = 0
-
-# # -------------------------------
-# # MAIN LOOP
-# # -------------------------------
-# while True:
-#     try:
-#         frame, distance = net_cam.read()
-#         if frame is None:
-#             continue
-#     except (ConnectionError, TimeoutError) as e:
-#         print(f"[NetworkCamera] Connection lost: {e}. Reconnecting...")
-#         try:
-#             net_cam.connect()
-#         except Exception as conn_err:
-#             print(f"[NetworkCamera] Reconnect failed: {conn_err}. Retrying in 2s...")
-#             time.sleep(2)
-#         continue
-
-#     # 1. Run HSV tracking on full frame
-#     hsv_ball = detect_tennis_ball_via_colour(frame)
-
-#     # 2. Periodically run YOLO tracking on resized frame
-#     frame_count += 1
-#     if frame_count % YOLO_INTERVAL == 0:
-#         small = cv2.resize(frame, (320, 240))
-#         yolo_res = tennis_detector.detect(small)
-        
-#         if yolo_res:
-#             # Scale coordinates up to match the full frame sizes
-#             scale_x = frame.shape[1] / 320
-#             scale_y = frame.shape[0] / 240
-#             last_yolo_ball = {
-#                 "x": int(yolo_res["x"] * scale_x),
-#                 "y": int(yolo_res["y"] * scale_y),
-#                 "size": int(yolo_res["size"] * (scale_x + scale_y) / 2),
-#                 "confidence": yolo_res["confidence"],
-#             }
-#         else:
-#             last_yolo_ball = None
-
-#     # 3. Fuse the results (now both are in the same coordinate space)
-#     ball = fuse_detections(hsv_ball, last_yolo_ball)
-
-#     # 4. Rendering Annotations
-#     if ball:
-#         cv2.circle(frame, (ball["x"], ball["y"]), int(ball["size"]), (0, 255, 0), 2)
-#         cv2.putText(frame, f"Tennis Ball {ball['confidence']:.2f} | Dist: {distance:.2f} cm",
-#                     (ball["x"] - 50, ball["y"] - 20),
-#                     cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
-#     else:
-#         cv2.putText(frame, f"Distance: {distance:.2f} cm", (10, 30),
-#                     cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
-
-#     # FPS Calculation
-#     now = time.time()
-#     fps = 0.9 * fps + 0.1 * (1 / (now - last_time))
-#     last_time = now
-#     cv2.putText(frame, f"FPS: {fps:.1f}", (10, frame.shape[0]-10),
-#                 cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
-
-#     cv2.imshow("Fusion Vision", frame)
-#     if cv2.waitKey(1) & 0xFF in (ord('q'), ord('d')):
-#         break
-
-# cv2.destroyAllWindows()
-
+import tkinter as tk
+from PIL import Image, ImageTk
 import cv2
+import threading
+import serial
 import time
 
+from JebsEyes.robot_state import RobotState
+from JebsEyes.network_camera import NetworkCamera
 from JebsEyes.hsv_ball import detect_tennis_ball_via_colour
 from JebsEyes.yolo_ball import TennisBallDetector
 from JebsEyes.fusion import fuse_detections
-from JebsEyes.network_camera import NetworkCamera
+from JebsEyes.ui.panda_panel import PandaApp
 
 
 # =========================================================
-# CONFIGURATION
+# VISION LOOP
 # =========================================================
 
-PI_IP = "192.168.0.142"
-PI_PORT = 6000
+def vision_loop(state, stop_event):
 
-YOLO_INTERVAL = 5
-
-DISPLAY_WIDTH = 640
-DISPLAY_HEIGHT = 480
-
-
-# =========================================================
-# INITIALIZE YOLO
-# =========================================================
-
-print("================================")
-print("       JEB VISION SYSTEM")
-print("================================")
-
-print("Loading YOLO detector...")
-
-tennis_detector = TennisBallDetector()
-
-print("✅ YOLO detector ready")
-
-
-# =========================================================
-# CONNECT TO NETWORK CAMERA
-# =========================================================
-
-print()
-print("Connecting to Jeb's camera...")
-
-net_cam = NetworkCamera(
-    stream_url="http://192.168.0.142:5000/video"
-)
-
-print("✅ Network camera connected")
-
-
-# =========================================================
-# VARIABLES
-# =========================================================
-
-frame_count = 0
-
-last_yolo_ball = None
-
-last_time = time.time()
-
-fps = 0.0
-
-
-# =========================================================
-# MAIN VISION LOOP
-# =========================================================
-
-print()
-print("================================")
-print("       VISION LOOP STARTED")
-print("================================")
-print()
-print("Press Q to quit")
-print()
-
-
-while True:
+    print("================================")
+    print("       JEB VISION THREAD")
+    print("================================")
 
     # -----------------------------------------------------
-    # GET FRAME FROM JEB
+    # YOLO
     # -----------------------------------------------------
+
+    print("Loading YOLO detector...")
 
     try:
+        tennis_detector = TennisBallDetector()
+        print("✅ YOLO detector ready")
 
-        frame, distance = net_cam.read()
+    except Exception as e:
+        print(f"❌ Failed to load YOLO detector: {e}")
+        tennis_detector = None
 
-        if frame is None:
-            continue
+    # -----------------------------------------------------
+    # CAMERA
+    # -----------------------------------------------------
 
-    except (ConnectionError, TimeoutError) as e:
+    print()
+    print("Connecting to Jeb's camera...")
 
-        print(
-            f"[NetworkCamera] Connection lost: {e}"
+    try:
+        net_cam = NetworkCamera(
+            stream_url="http://192.168.0.142:5000/video"
         )
 
-        print("Attempting reconnect...")
+        print("✅ Jeb's camera connected")
 
-        try:
+    except Exception as e:
 
-            net_cam.connect()
+        print(f"❌ Camera connection failed: {e}")
 
-            print("✅ Reconnected")
+        net_cam = None
 
-        except Exception as conn_err:
+    # -----------------------------------------------------
+    # YOLO SETTINGS
+    # -----------------------------------------------------
 
-            print(
-                f"[NetworkCamera] Reconnect failed: "
-                f"{conn_err}"
-            )
+    frame_count = 0
+
+    YOLO_INTERVAL = 5
+
+    last_yolo_ball = None
+
+    # -----------------------------------------------------
+    # MAIN VISION LOOP
+    # -----------------------------------------------------
+
+    while not stop_event.is_set():
+
+        # =================================================
+        # CAMERA CONNECTION
+        # =================================================
+
+        if net_cam is None:
 
             time.sleep(2)
 
-        continue
+            if stop_event.is_set():
+                break
 
+            try:
 
-    # -----------------------------------------------------
-    # FLIP CAMERA
-    # -----------------------------------------------------
-    #
-    # Camera is physically upside down on Jeb.
-    #
-    # flipCode = -1 means:
-    #   flip horizontally AND vertically
-    #
-    # -----------------------------------------------------
+                print("Attempting to reconnect camera...")
 
-    # frame = cv2.flip(frame, -1) # Hey Michael, I commented this out because the camera is now mounted correctly on Jeb. -Jordan
+                net_cam = NetworkCamera(
+                    stream_url="http://192.168.0.142:5000/video"
+                )
 
+                print("✅ Camera reconnected")
 
-    # -----------------------------------------------------
-    # HSV DETECTION
-    # -----------------------------------------------------
+            except Exception as e:
 
-    hsv_ball = detect_tennis_ball_via_colour(frame)
+                print(
+                    f"⚠️ Camera reconnect failed: {e}"
+                )
 
+                continue
 
-    # -----------------------------------------------------
-    # YOLO DETECTION
-    # -----------------------------------------------------
+        # =================================================
+        # READ CAMERA
+        # =================================================
 
-    frame_count += 1
+        try:
 
-    if frame_count % YOLO_INTERVAL == 0:
+            frame, distance = net_cam.read()
 
-        small = cv2.resize(
-            frame,
-            (320, 240)
-        )
+            if frame is None:
+                continue
 
-        yolo_res = tennis_detector.detect(
-            small
-        )
+        except Exception as e:
 
-
-        if yolo_res:
-
-            scale_x = (
-                frame.shape[1] / 320
+            print(
+                f"⚠️ Camera read error: {e}"
             )
 
-            scale_y = (
-                frame.shape[0] / 240
+            try:
+                net_cam.release()
+            except Exception:
+                pass
+
+            net_cam = None
+
+            continue
+
+        # =================================================
+        # HSV DETECTION
+        # =================================================
+
+        try:
+
+            hsv_ball = detect_tennis_ball_via_colour(
+                frame
             )
 
-            last_yolo_ball = {
+        except Exception as e:
 
-                "x": int(
-                    yolo_res["x"] * scale_x
-                ),
+            print(
+                f"⚠️ HSV detection error: {e}"
+            )
 
-                "y": int(
-                    yolo_res["y"] * scale_y
-                ),
+            hsv_ball = None
 
-                "size": int(
-                    yolo_res["size"]
-                    * (scale_x + scale_y)
-                    / 2
+        # =================================================
+        # YOLO DETECTION
+        # =================================================
+
+        frame_count += 1
+
+        if (
+            tennis_detector is not None
+            and frame_count % YOLO_INTERVAL == 0
+        ):
+
+            try:
+
+                # Reduce image size before YOLO
+                small = cv2.resize(
+                    frame,
+                    (320, 240)
+                )
+
+                yolo_ball = tennis_detector.detect(
+                    small
+                )
+
+                if yolo_ball:
+
+                    scale_x = (
+                        frame.shape[1] / 320
+                    )
+
+                    scale_y = (
+                        frame.shape[0] / 240
+                    )
+
+                    last_yolo_ball = {
+
+                        "x": int(
+                            yolo_ball["x"]
+                            * scale_x
+                        ),
+
+                        "y": int(
+                            yolo_ball["y"]
+                            * scale_y
+                        ),
+
+                        "size": int(
+                            yolo_ball["size"]
+                            * (scale_x + scale_y)
+                            / 2
+                        ),
+
+                        "confidence":
+                            yolo_ball[
+                                "confidence"
+                            ],
+                    }
+
+                else:
+
+                    last_yolo_ball = None
+
+            except Exception as e:
+
+                print(
+                    f"⚠️ YOLO detection error: {e}"
+                )
+
+        # =================================================
+        # FUSE HSV + YOLO
+        # =================================================
+
+        try:
+
+            ball = fuse_detections(
+                hsv_ball,
+                last_yolo_ball
+            )
+
+        except Exception as e:
+
+            print(
+                f"⚠️ Fusion error: {e}"
+            )
+
+            ball = None
+
+        # =================================================
+        # WRITE TO SHARED ROBOT STATE
+        # =================================================
+
+        with state.lock:
+
+            state.frame = (
+                frame.copy()
+                if frame is not None
+                else None
+            )
+
+            if ball:
+
+                state.ball_detected = True
+
+                state.ball_x = ball["x"]
+
+                state.ball_y = ball["y"]
+
+                state.ball_confidence = (
+                    ball["confidence"]
+                )
+
+            else:
+
+                state.ball_detected = False
+
+        # =================================================
+        # SMALL DELAY
+        # =================================================
+
+        time.sleep(0.005)
+
+    # =====================================================
+    # CLEANUP
+    # =====================================================
+
+    if net_cam is not None:
+
+        try:
+            net_cam.release()
+
+        except Exception:
+            pass
+
+    print("🛑 Vision thread stopped")
+
+
+# =========================================================
+# ROVER UI
+# =========================================================
+
+class RoverUI:
+
+    def __init__(self, root):
+
+        self.root = root
+
+        # -------------------------------------------------
+        # WINDOW
+        # -------------------------------------------------
+
+        self.root.title(
+            "Rover Mission Control"
+        )
+
+        self.root.geometry(
+            "1000x700"
+        )
+
+        self.root.configure(
+            bg="lightgray"
+        )
+
+        # -------------------------------------------------
+        # SHARED STATE
+        # -------------------------------------------------
+
+        self.state = RobotState()
+
+        self.stop_event = (
+            threading.Event()
+        )
+
+        # -------------------------------------------------
+        # SERIAL / GROUND PICO
+        # -------------------------------------------------
+
+        self.pico = None
+
+        try:
+
+            self.pico = serial.Serial(
+                "COM7",
+                115200,
+                timeout=1
+            )
+
+            print(
+                "✅ Connected to Pico on COM7"
+            )
+
+        except Exception as e:
+
+            print(
+                f"⚠️ Failed to connect to Pico: {e}"
+            )
+
+            self.pico = None
+
+        # -------------------------------------------------
+        # CURRENT PAN
+        # -------------------------------------------------
+
+        self.current_pan = 90
+
+        # -------------------------------------------------
+        # START VISION THREAD
+        # -------------------------------------------------
+
+        self.vision_thread = (
+            threading.Thread(
+                target=vision_loop,
+                args=(
+                    self.state,
+                    self.stop_event
                 ),
+                daemon=True
+            )
+        )
+
+        self.vision_thread.start()
+
+        # =================================================
+        # LEFT PANEL
+        # =================================================
+
+        left_frame = tk.Frame(
+            root,
+            bg="white"
+        )
+
+        left_frame.pack(
+            side="left",
+            fill="both",
+            expand=True
+        )
+
+        # -------------------------------------------------
+        # VIDEO
+        # -------------------------------------------------
+
+        self.video_label = tk.Label(
+            left_frame,
+            bg="black"
+        )
+
+        self.video_label.pack(
+            padx=20,
+            pady=20
+        )
+
+        # -------------------------------------------------
+        # STATUS
+        # -------------------------------------------------
+
+        self.status = tk.Label(
+            left_frame,
+            text=(
+                "WiFi: ● Connected | "
+                "Battery: -- | "
+                "Telemetry: OK"
+            ),
+            font=("Arial", 12),
+            bg="white"
+        )
+
+        self.status.pack(
+            pady=5
+        )
+
+        # =================================================
+        # RIGHT PANEL
+        # =================================================
+
+        panda_frame = tk.Frame(
+            root,
+            width=400,
+            bg="black"
+        )
+
+        panda_frame.pack(
+            side="right",
+            fill="y"
+        )
+
+        panda_frame.pack_propagate(
+            False
+        )
+
+        # -------------------------------------------------
+        # PANDA3D
+        # -------------------------------------------------
+
+        self.panda = PandaApp(
+            panda_frame.winfo_id(),
+            root
+        )
+
+        # -------------------------------------------------
+        # UI UPDATE LOOP
+        # -------------------------------------------------
+
+        self.update_ui()
+
+        # -------------------------------------------------
+        # CLEAN SHUTDOWN
+        # -------------------------------------------------
+
+        self.root.protocol(
+            "WM_DELETE_WINDOW",
+            self.on_close
+        )
+
+    # =====================================================
+    # SEND COMMAND TO GROUND PICO
+    # =====================================================
+
+    def send_pico_command(self, command):
+
+        if self.pico is not None:
+
+            try:
+
+                self.pico.write(
+                    (command + "\n").encode()
+                )
+
+                self.pico.flush()
+
+            except Exception as e:
+
+                print(
+                    f"❌ Pico connection lost: {e}"
+                )
+
+                try:
+                    self.pico.close()
+                except Exception:
+                    pass
+
+                self.pico = None
+
+        else:
+
+            print(
+                f"[MOCK PICO] Action: {command}"
+            )
+
+    # =====================================================
+    # UI UPDATE
+    # =====================================================
+
+    def update_ui(self):
+
+        # -------------------------------------------------
+        # READ SHARED STATE
+        # -------------------------------------------------
+
+        with self.state.lock:
+
+            frame = self.state.frame
+
+            detected_ball = (
+                self.state.ball_detected
+            )
+
+            x = self.state.ball_x
+
+            y = self.state.ball_y
+
+            confidence = (
+                self.state.ball_confidence
+            )
+
+        # =================================================
+        # TARGET TRACKING
+        # =================================================
+
+        if detected_ball and frame is not None:
+
+            # ---------------------------------------------
+            # Find actual frame centre
+            # ---------------------------------------------
+
+            frame_center = (
+                frame.shape[1] // 2
+            )
+
+            error = x - frame_center
+
+            # ---------------------------------------------
+            # Deadzone
+            # ---------------------------------------------
+
+            deadzone = 40
+
+            # ---------------------------------------------
+            # Move head LEFT
+            # ---------------------------------------------
+
+            if error < -deadzone:
+
+                self.send_pico_command(
+                    "LEFT"
+                )
+
+                self.current_pan -= 2
+
+                self.current_pan = max(
+                    60,
+                    self.current_pan
+                )
+
+            # ---------------------------------------------
+            # Move head RIGHT
+            # ---------------------------------------------
+
+            elif error > deadzone:
+
+                self.send_pico_command(
+                    "RIGHT"
+                )
+
+                self.current_pan += 2
+
+                self.current_pan = min(
+                    120,
+                    self.current_pan
+                )
+
+        # =================================================
+        # BUILD BALL DATA
+        # =================================================
+
+        ball = None
+
+        if detected_ball:
+
+            ball = {
+
+                "x": x,
+
+                "y": y,
+
+                "size": 20,
 
                 "confidence":
-                    yolo_res["confidence"],
+                    confidence
             }
 
-        else:
+        # =================================================
+        # UPDATE PANDA3D
+        # =================================================
 
-            last_yolo_ball = None
+        if detected_ball:
 
+            # ---------------------------------------------
+            # Convert camera coordinates to simulation
+            # coordinates
+            # ---------------------------------------------
 
-    # -----------------------------------------------------
-    # FUSE HSV + YOLO
-    # -----------------------------------------------------
+            if frame is not None:
 
-    ball = fuse_detections(
-        hsv_ball,
-        last_yolo_ball
-    )
+                frame_width = (
+                    frame.shape[1]
+                )
 
+                frame_height = (
+                    frame.shape[0]
+                )
 
-    # -----------------------------------------------------
-    # DRAW DETECTION
-    # -----------------------------------------------------
+                px = (
+                    x - frame_width / 2
+                ) / 10
 
-    if ball:
+                py = (
+                    y - frame_height / 2
+                ) / 10
 
-        x = ball["x"]
-        y = ball["y"]
-        size = int(ball["size"])
+            else:
 
-        confidence = ball["confidence"]
+                px = 0
+                py = 0
 
+            # ---------------------------------------------
+            # Update simulated ball
+            # ---------------------------------------------
 
-        # Detection circle
+            self.panda.sim.set_ball_position(
+                px,
+                py,
+                0.5
+            )
 
-        cv2.circle(
-            frame,
-            (x, y),
-            size,
-            (0, 255, 0),
-            2
-        )
+            # ---------------------------------------------
+            # Update sensor/head angle
+            # ---------------------------------------------
 
-
-        # Detection centre
-
-        cv2.circle(
-            frame,
-            (x, y),
-            4,
-            (0, 0, 255),
-            -1
-        )
-
-
-        # Detection information
-
-        if distance is not None:
-
-            text = (
-                f"Tennis Ball "
-                f"{confidence:.2f} | "
-                f"Dist: {distance:.1f} cm"
+            self.panda.sim.set_sensor_angle(
+                self.current_pan
             )
 
         else:
 
-            text = (
-                f"Tennis Ball "
-                f"{confidence:.2f}"
+            self.panda.sim.ball_node.hide()
+
+        # =================================================
+        # UPDATE VIDEO
+        # =================================================
+
+        if frame is not None:
+
+            display = frame.copy()
+
+            # ---------------------------------------------
+            # Draw detected ball
+            # ---------------------------------------------
+
+            if ball:
+
+                cv2.circle(
+                    display,
+                    (
+                        ball["x"],
+                        ball["y"]
+                    ),
+                    ball["size"],
+                    (0, 255, 0),
+                    2
+                )
+
+                cv2.putText(
+                    display,
+                    (
+                        f"Tennis Ball "
+                        f"{ball['confidence']:.2f}"
+                    ),
+                    (
+                        max(
+                            10,
+                            ball["x"] - 80
+                        ),
+                        max(
+                            30,
+                            ball["y"] - 20
+                        )
+                    ),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.6,
+                    (0, 255, 0),
+                    2
+                )
+
+            # ---------------------------------------------
+            # Status text
+            # ---------------------------------------------
+
+            if detected_ball:
+
+                cv2.putText(
+                    display,
+                    "TARGET LOCK",
+                    (10, 30),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.7,
+                    (0, 255, 0),
+                    2
+                )
+
+            else:
+
+                cv2.putText(
+                    display,
+                    "SEARCHING...",
+                    (10, 30),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.7,
+                    (0, 255, 255),
+                    2
+                )
+
+            # ---------------------------------------------
+            # Head angle
+            # ---------------------------------------------
+
+            cv2.putText(
+                display,
+                f"Pan: {self.current_pan}°",
+                (10, display.shape[0] - 35),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.6,
+                (255, 255, 255),
+                2
             )
 
+            # ---------------------------------------------
+            # Convert BGR -> RGB
+            # ---------------------------------------------
 
-        cv2.putText(
-            frame,
-            text,
-            (max(10, x - 100), max(25, y - 20)),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.6,
-            (255, 255, 255),
-            2
+            rgb = cv2.cvtColor(
+                display,
+                cv2.COLOR_BGR2RGB
+            )
+
+            img = Image.fromarray(
+                rgb
+            )
+
+            imgtk = ImageTk.PhotoImage(
+                image=img
+            )
+
+            self.video_label.imgtk = imgtk
+
+            self.video_label.configure(
+                image=imgtk
+            )
+
+        # =================================================
+        # RUN AGAIN
+        # =================================================
+
+        if not self.stop_event.is_set():
+
+            self.root.after(
+                15,
+                self.update_ui
+            )
+
+    # =====================================================
+    # SHUTDOWN
+    # =====================================================
+
+    def on_close(self):
+
+        print()
+        print(
+            "Shutting down Jeb Mission Control..."
         )
 
+        # -------------------------------------------------
+        # Stop vision thread
+        # -------------------------------------------------
 
-    # -----------------------------------------------------
-    # DISTANCE DISPLAY
-    # -----------------------------------------------------
+        self.stop_event.set()
 
-    if distance is not None:
+        # -------------------------------------------------
+        # Close Pico
+        # -------------------------------------------------
 
-        cv2.putText(
-            frame,
-            f"Distance: {distance:.1f} cm",
-            (10, 30),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.7,
-            (255, 255, 255),
-            2
-        )
+        if self.pico is not None:
 
+            try:
+                self.pico.close()
 
-    # -----------------------------------------------------
-    # FPS
-    # -----------------------------------------------------
+            except Exception:
+                pass
 
-    now = time.time()
+        # -------------------------------------------------
+        # Destroy UI
+        # -------------------------------------------------
 
-    dt = now - last_time
-
-    if dt > 0:
-
-        current_fps = 1 / dt
-
-        fps = (
-            0.9 * fps
-            + 0.1 * current_fps
-        )
-
-    last_time = now
-
-
-    cv2.putText(
-        frame,
-        f"FPS: {fps:.1f}",
-        (10, frame.shape[0] - 10),
-        cv2.FONT_HERSHEY_SIMPLEX,
-        0.5,
-        (0, 255, 0),
-        2
-    )
-
-
-    # -----------------------------------------------------
-    # SHOW VIDEO
-    # -----------------------------------------------------
-
-    cv2.imshow(
-        "Jeb Vision",
-        frame
-    )
-
-
-    # -----------------------------------------------------
-    # EXIT
-    # -----------------------------------------------------
-
-    key = cv2.waitKey(1) & 0xFF
-
-    if key == ord("q"):
-
-        break
+        self.root.destroy()
 
 
 # =========================================================
-# CLEANUP
+# PROGRAM ENTRY POINT
 # =========================================================
 
-cv2.destroyAllWindows()
+def main():
 
-print()
-print("Jeb Vision System stopped.")
+    root = tk.Tk()
+
+    app = RoverUI(root)
+
+    root.mainloop()
+
+
+if __name__ == "__main__":
+
+    main()
