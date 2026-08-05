@@ -1,48 +1,36 @@
-# import threading
-
-# class RobotState:
-#     def __init__(self):
-#         self.lock = threading.Lock()
-
-#         self.wifi_connected = False
-#         self.signal_strength = 0.0
-#         self.battery = 0.0
-
-#         self.camera_yaw = 0.0
-#         self.camera_pitch = 0.0
-
-#         self.last_frame = None
-
-
-# import threading
-
-# class RobotState:
-#     def __init__(self):
-#         self.lock = threading.Lock()
-#         self.wifi_connected = False
-#         self.battery = 100.0
-#         self.camera_yaw = 0.0
-
-# rover_state.py
 import threading
 
+
 class RobotState:
+
     def __init__(self):
+
         self.lock = threading.Lock()
 
-        # Vision
+        # =================================================
+        # VISION
+        # =================================================
+
         self.frame = None
-        self.ball = 0
+
         self.ball_detected = False
         self.ball_x = 0
         self.ball_y = 0
         self.ball_confidence = 0.0
 
-        # Robot pose (future)
-        self.camera_yaw = 0.0
-        self.camera_pitch = 0.0
+        # =================================================
+        # ROBOT HEAD / POSE
+        # =================================================
 
-        # Telemetry
+        self.camera_yaw = 90.0
+        self.camera_pitch = 90.0
+
+        # =================================================
+        # TELEMETRY
+        # =================================================
+
         self.wifi_connected = False
         self.battery = 0.0
-        # self.distance_cm = 0.0
+
+        # Ultrasonic distance
+        self.distance_cm = None
