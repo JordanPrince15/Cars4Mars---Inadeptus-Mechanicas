@@ -2,9 +2,10 @@ import tkinter as tk
 from PIL import Image, ImageTk
 import cv2
 import threading
+import serial
 
 from JebsEyes.robot_state import RobotState
-from JebsEyes.test_main import vision_loop
+from JebsEyes.main import vision_loop
 from JebsEyes.ui.panda_panel import PandaApp
 
 
@@ -33,10 +34,10 @@ class RoverUI:
 
         self.video_label = tk.Label(left_frame, bg="black")
         self.video_label.pack(padx=20, pady=20)
-
+        Direction = tk.Label(left_frame, text="This is a simple label", font=("Arial", 24), bg="white")
         self.status = tk.Label(
             left_frame,
-            text="WiFi: ● Connected | Battery: 100% | Telemetry: OK",
+            text="WiFi: ● Connected | Battery: 100% | Telemetry: OK " + Direction.cget("text"),
             font=("Arial", 12),
             bg="white"
         )
@@ -56,34 +57,108 @@ class RoverUI:
         # Clean shutdown
         self.root.protocol("WM_DELETE_WINDOW", self.on_close)
 
+        # Serial communication setup
+        self.stop_event = threading.Event()
+        try:
+            self.pico = serial.Serial('COM7', 115200)
+            print("✅ Connected to Pico on COM7")
+
+        except Exception as e:
+            print(f"❌ Failed to connect to Pico: {e}")
+            self.pico = None
+        self.current_pan = 0
+
     def update_ui(self):
+
+        # Read shared state FIRST
         with self.state.lock:
             frame = self.state.frame
-            # ball = self.state.ball
             detected_ball = self.state.ball_detected
             x = self.state.ball_x
             y = self.state.ball_y
             confidence = self.state.ball_confidence
-            ball = None
-            if detected_ball:
-                ball = {
-                    "x": x,
-                    "y": y,
-                    "size": 20,
-                    "confidence": confidence
-                }  
 
-                px = (x - 320/2) / 10
-                py = (y - 240/2) / 10
-                self.panda.sim.set_ball_position(px, py, 0.5)
-            else:
-                self.panda.sim.ball_node.hide() # Hide ball if not detected
+        # =========================
+        # STEPPER MOTOR CONTROL
+        # =========================
+
+        if detected_ball:
+
+            frame_center = 640 // 2
+            error = x - frame_center
+
+            deadzone = 40
+
+            if error < -deadzone:
+                # Safe layout: Only write if the serial port actually connected successfully
+                if self.pico is not None:
+                    try:
+                        self.pico.write(b"LEFT\n")
+                        self.pico.flush()
+                    except Exception as e:
+                        print(f"❌ Pico connection lost during runtime: {e}")
+                        self.pico = None  # Clear it so it stops spamming broken writes
+                else:
+                    # This prevents the crash and prints out to your laptop console instead
+                    print("[MOCK PICO] Action: LEFT")
+                    
+                self.current_pan -= 2
+
+            elif error > deadzone:
+                # Safe layout: Only write if the serial port actually connected successfully
+                if self.pico is not None:
+                    try:
+                        self.pico.write(b"RIGHT\n")
+                        self.pico.flush()
+                    except Exception as e:
+                        print(f"❌ Pico connection lost during runtime: {e}")
+                        self.pico = None  # Clear it so it stops spamming broken writes
+                else:
+                    # This prevents the crash and prints out to your laptop console instead
+                    print("[MOCK PICO] Action: RIGHT")
+                self.current_pan += 2
+
+        # =========================
+        # BUILD BALL DATA
+        # =========================
+
+        ball = None
+
+        if detected_ball:
+            ball = {
+                "x": x,
+                "y": y,
+                "size": 20,
+                "confidence": confidence
+            }
+
+        # =========================
+        # UPDATE 3D VIEW
+        # =========================
+
+        if detected_ball:
+
+            px = (x - 320/2) / 10
+            py = (y - 240/2) / 10
+
+            self.panda.sim.set_ball_position(px, py, 0.5)
+
+            # Sync robot head with real stepper angle
+            self.panda.sim.set_sensor_angle(self.current_pan)
+
+        else:
+            self.panda.sim.ball_node.hide()
+
+        # =========================
+        # UPDATE VIDEO FEED
+        # =========================
 
         if frame is not None:
-            # Draw overlay (UI-side, not vision-side)
+
             display = frame.copy()
 
             if ball:
+
                 cv2.circle(
                     display,
                     (ball["x"], ball["y"]),
@@ -91,6 +166,7 @@ class RoverUI:
                     (0, 255, 0),
                     2
                 )
+
                 cv2.putText(
                     display,
                     f"Tennis Ball {ball['confidence']:.2f}",
@@ -101,15 +177,16 @@ class RoverUI:
                     2
                 )
 
-            # Convert to Tkinter image
             rgb = cv2.cvtColor(display, cv2.COLOR_BGR2RGB)
+
             img = Image.fromarray(rgb)
+
             imgtk = ImageTk.PhotoImage(image=img)
 
             self.video_label.imgtk = imgtk
             self.video_label.configure(image=imgtk)
 
-        # Schedule next update
+        # Run again
         self.root.after(15, self.update_ui)
 
     def on_close(self):

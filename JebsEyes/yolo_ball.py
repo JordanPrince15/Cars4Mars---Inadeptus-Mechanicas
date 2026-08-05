@@ -1,56 +1,70 @@
 import cv2
 import numpy as np
+import warnings
+
+# We try to import the real engine. If you haven't installed it yet, run: pip install ultralytics
+try:
+    from ultralytics import YOLO
+    HAS_YOLO = True
+except ImportError:
+    HAS_YOLO = False
+    warnings.warn("⚠️ ultralytics package not installed. YOLO detection is currently mocking dummy data!")
 
 class TennisBallDetector:
-    def __init__(self, lower_green=None, upper_green=None, min_area=500, min_radius=10):
+    def __init__(self, model_path="yolov8n.pt"):
         """
-        Initialize the tennis ball detector.
-        Args:
-            lower_green: np.array of HSV lower bound
-            upper_green: np.array of HSV upper bound
-            min_area: minimum contour area to consider
-            min_radius: minimum radius of enclosing circle
+        Initialize the real YOLO target detector.
+        Downloads / loads standard lightweight nano weights if no custom model is found.
         """
-        self.LOWER_GREEN = lower_green if lower_green is not None else np.array([25, 80, 80])
-        self.UPPER_GREEN = upper_green if upper_green is not None else np.array([40, 255, 255])
-        self.min_area = min_area
-        self.min_radius = min_radius
+        if HAS_YOLO:
+            # yolov8n detects "sports ball" out of the box (Class ID 32 in standard COCO dataset)
+            self.model = YOLO(model_path)
+            self.target_class_id = 32 
+        else:
+            self.model = None
 
     def detect(self, frame):
         """
-        Detect tennis ball in a given frame.
-        Args:
-            frame: BGR image (numpy array)
-        Returns:
-            dict with x, y, size OR None if not found
+        Run actual deep learning inference on the frame to find the ball.
         """
-        # Convert to HSV
-        hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+        if frame is None:
+            return None
 
-        # Create mask
-        mask = cv2.inRange(hsv, self.LOWER_GREEN, self.UPPER_GREEN)
+        if not HAS_YOLO:
+            # Fallback placeholder so your code runs while you configure your packages
+            return None
 
-        # Clean up noise
-        mask = cv2.GaussianBlur(mask, (11, 11), 0)
-        mask = cv2.erode(mask, None, iterations=2)
-        mask = cv2.dilate(mask, None, iterations=2)
+        # Run inference with a low threshold for responsiveness
+        results = self.model(frame, verbose=False, conf=0.35)[0]
+        
+        best_box = None
+        max_conf = 0.0
 
-        # Find contours
-        contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        for box in results.boxes:
+            cls_id = int(box.cls[0])
+            conf = float(box.conf[0])
+            
+            # Filter specifically for the sports ball tracking token
+            if cls_id == self.target_class_id:
+                if conf > max_conf:
+                    max_conf = conf
+                    best_box = box
 
-        if contours:
-            # Largest green object
-            c = max(contours, key=cv2.contourArea)
-            area = cv2.contourArea(c)
+        if best_box is not None:
+            # Extract standard bounding box coordinates
+            xyxy = best_box.xyxy[0].cpu().numpy()
+            x1, y1, x2, y2 = xyxy
+            
+            # Convert to target payload structures
+            center_x = int((x1 + x2) / 2)
+            center_y = int((y1 + y2) / 2)
+            estimated_radius = int(max(x2 - x1, y2 - y1) / 2)
 
-            if area > self.min_area:
-                ((x, y), radius) = cv2.minEnclosingCircle(c)
-                if radius > self.min_radius:
-                    return {
-                        "x": int(x),
-                        "y": int(y),
-                        "size": int(radius),
-                        "confidence": 1.0  # For fusion, you can keep this
-                    }
+            return {
+                "x": center_x,
+                "y": center_y,
+                "size": estimated_radius,
+                "confidence": max_conf
+            }
 
         return None
