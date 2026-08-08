@@ -4,6 +4,9 @@
 
 Welcome to the official repository for our Cars4Mars 2026 rover project!  
 This repo contains the hardware designs, software, documentation, CAD files, and research for our competition rover.
+Recently, we uploaded a video on YouTube showcasing what the rover can do: 
+https://www.youtube.com/watch?v=LHno_W5JRfo
+
 
 ---
 
@@ -33,7 +36,7 @@ Our team is developing a modular rover platform using affordable components, rob
 - PVC structure  
 - Shock-absorbing mounts  
 - Weatherproof electronics housing  
-- Custom 3D printed brackets and mounts  
+- Custom 3D-printed brackets and mounts  
 
 ### 🔹 **3. Computing & Control**
 - Raspberry Pi (main computer)  
@@ -56,7 +59,4 @@ Our team is developing a modular rover platform using affordable components, rob
 - XT60 connectors  
 - Voltage regulation (5V / 3.3V)
 
----
-
-## 🛠️ Repository Structure
 
