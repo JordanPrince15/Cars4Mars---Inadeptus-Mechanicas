@@ -5,7 +5,7 @@ import threading
 import serial
 
 from JebsEyes.robot_state import RobotState
-from JebsEyes.main import vision_loop
+from JebsEyes.main import CameraManager, vision_loop
 from JebsEyes.ui.panda_panel import PandaApp
 
 
@@ -21,11 +21,15 @@ class RoverUI:
         self.stop_event = threading.Event()
 
         # Start vision thread
+        self.camera = CameraManager()
+
         self.vision_thread = threading.Thread(
             target=vision_loop,
-            args=(self.state, self.stop_event),
+            args=(self.state, self.stop_event, self.camera),
             daemon=True
         )
+
+        self.vision_thread.start()
         self.vision_thread.start()
 
             # --- LEFT PANEL (Video) ---
