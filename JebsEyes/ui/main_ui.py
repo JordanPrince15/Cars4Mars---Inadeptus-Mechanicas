@@ -30,7 +30,7 @@ class RoverUI:
         )
 
         self.vision_thread.start()
-        self.vision_thread.start()
+
 
             # --- LEFT PANEL (Video) ---
         left_frame = tk.Frame(root, bg="white")

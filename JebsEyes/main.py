@@ -5,6 +5,7 @@ from JebsEyes.network_camera import NetworkCamera
 from JebsEyes.hsv_ball import detect_tennis_ball_via_colour
 from JebsEyes.yolo_ball import TennisBallDetector
 from JebsEyes.fusion import fuse_detections
+from JebsEyes.balloon_decector import BalloonDetector
 
 
 # ============================================================
@@ -12,13 +13,14 @@ from JebsEyes.fusion import fuse_detections
 # ============================================================
 
 # Choose the camera mode here.
-#
+# How to run: python -m JebsEyes.ui.main_ui
 # "auto"    -> Try network camera first, then laptop webcam
 # "network" -> Raspberry Pi network camera
+
 # "webcam"  -> Laptop webcam
 # "off"     -> No camera
 #
-CAMERA_MODE = "webcam"
+CAMERA_MODE = "auto"
 
 
 # Raspberry Pi camera stream
@@ -276,7 +278,7 @@ class CameraManager:
                 )
 
             # Flip webcam image
-            frame = cv2.flip(frame, -1)
+            # frame = cv2.flip(frame, -1)
 
             return frame, None
 
@@ -347,6 +349,8 @@ def vision_loop(state, stop_event, camera):
 
     detector = TennisBallDetector()
 
+    balloon_detector = BalloonDetector()
+
     frame_counter = 0
 
     last_yolo = None
@@ -402,7 +406,22 @@ def vision_loop(state, stop_event, camera):
         frame_counter += 1
 
 
-        if frame_counter % 5 == 0:
+        if frame_counter % 30 == 0:
+
+            balloon_result = balloon_detector.detect(frame)
+            ball_result = detector.detect(frame)
+
+            print()
+            print("===============ROBOFLOW===============")
+            print(balloon_result)
+            print("======================================")
+            print()
+
+            if balloon_result is not None:
+                print(f"Balloon detection result: {balloon_result}")
+
+            if ball_result is not None:
+                print(f"Ball detection result: {ball_result}")
 
             small = cv2.resize(
                 frame,
