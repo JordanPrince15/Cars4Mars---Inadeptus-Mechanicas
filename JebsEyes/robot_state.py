@@ -2,10 +2,18 @@ import threading
 
 
 class RobotState:
-
     def __init__(self):
-
         self.lock = threading.Lock()
+
+        # =================================================
+        # MISSION CONTROL
+        # =================================================
+
+        # MANUAL or AUTONOMOUS
+        self.control_mode = "MANUAL"
+
+        # OBJECTS or BALLOONS
+        self.mission = "OBJECTS"
 
         # =================================================
         # VISION
@@ -13,10 +21,38 @@ class RobotState:
 
         self.frame = None
 
+        # Tennis ball
         self.ball_detected = False
         self.ball_x = 0
         self.ball_y = 0
         self.ball_confidence = 0.0
+
+        # =================================================
+        # OBJECT MISSION
+        # =================================================
+
+        # Currently detected object
+        # e.g. "tennis_ball", "traffic_cone", "hammer"
+        self.object_class = None
+
+        # LEFT, CENTRE, RIGHT, or None
+        self.object_direction = None
+
+        # =================================================
+        # BALLOON MISSION
+        # =================================================
+
+        self.balloon_detected = False
+        self.balloon_class = None
+        self.balloon_x = 0
+        self.balloon_y = 0
+        self.balloon_confidence = 0.0
+
+        # Current balloon target
+        self.balloon_target = "black_balloon"
+
+        # WAITING, APPROACHING, STOPPED, COMPLETE, etc.
+        self.balloon_status = "WAITING"
 
         # =================================================
         # ROBOT HEAD / POSE

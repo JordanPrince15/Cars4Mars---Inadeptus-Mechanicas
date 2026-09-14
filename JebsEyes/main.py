@@ -1,11 +1,8 @@
 import cv2
 import time
 
+from JebsEyes.mission_controller import MissionController
 from JebsEyes.network_camera import NetworkCamera
-from JebsEyes.hsv_ball import detect_tennis_ball_via_colour
-from JebsEyes.yolo_ball import TennisBallDetector
-from JebsEyes.fusion import fuse_detections
-from JebsEyes.balloon_decector import BalloonDetector
 
 
 # ============================================================
@@ -20,7 +17,7 @@ from JebsEyes.balloon_decector import BalloonDetector
 # "webcam"  -> Laptop webcam
 # "off"     -> No camera
 #
-CAMERA_MODE = "auto"
+CAMERA_MODE = "webcam"  # Change this to "network" for Raspberry Pi camera, "webcam" for laptop webcam, or "off" to disable camera
 
 
 # Raspberry Pi camera stream
@@ -339,21 +336,11 @@ class CameraManager:
 # VISION LOOP
 # ============================================================
 
-def vision_loop(state, stop_event, camera):
-
+def vision_loop(state, stop_event, camera, mission_controller):
     print()
     print("==============================")
     print("       JEB VISION THREAD")
     print("==============================")
-
-
-    detector = TennisBallDetector()
-
-    balloon_detector = BalloonDetector()
-
-    frame_counter = 0
-
-    last_yolo = None
 
 
     # ========================================================
@@ -367,146 +354,82 @@ def vision_loop(state, stop_event, camera):
         # ----------------------------------------------------
 
         try:
-
             frame, distance = camera.read()
 
         except Exception as e:
-
             print(f"⚠ Camera error: {e}")
-
             time.sleep(2)
 
             try:
-
                 print("Attempting camera reconnect...")
-
                 camera.connect()
 
             except Exception:
-
                 pass
 
             continue
 
-
         # ----------------------------------------------------
-        # HSV detection
-        # ----------------------------------------------------
-
-        hsv_ball = detect_tennis_ball_via_colour(frame)
-
-
-        # ----------------------------------------------------
-        # YOLO detection
-        #
-        # Run every 5 frames instead of every frame to
-        # reduce CPU usage.
+        # Process frame through MissionController
         # ----------------------------------------------------
 
-        frame_counter += 1
-
-
-        if frame_counter % 30 == 0:
-
-            balloon_result = balloon_detector.detect(frame)
-            ball_result = detector.detect(frame)
-
-            print()
-            print("===============ROBOFLOW===============")
-            print(balloon_result)
-            print("======================================")
-            print()
-
-            if balloon_result is not None:
-                print(f"Balloon detection result: {balloon_result}")
-
-            if ball_result is not None:
-                print(f"Ball detection result: {ball_result}")
-
-            small = cv2.resize(
-                frame,
-                (320, 240)
-            )
-
-
-            yolo = detector.detect(small)
-
-
-            if yolo:
-
-                scale_x = frame.shape[1] / 320
-                scale_y = frame.shape[0] / 240
-
-
-                last_yolo = {
-
-                    "x": int(
-                        yolo["x"] * scale_x
-                    ),
-
-                    "y": int(
-                        yolo["y"] * scale_y
-                    ),
-
-                    "size": int(
-                        yolo["size"]
-                        * (scale_x + scale_y)
-                        / 2
-                    ),
-
-                    "confidence":
-                        yolo["confidence"]
-                }
-
-
-            else:
-
-                last_yolo = None
-
+        result = mission_controller.process_frame(frame)
 
         # ----------------------------------------------------
-        # Fuse HSV + YOLO
+        # Get object-mission result
         # ----------------------------------------------------
 
-        ball = fuse_detections(
-            hsv_ball,
-            last_yolo
-        )
+        ball = result.get("ball")
+        direction = result.get("direction")
 
-
-        # ----------------------------------------------------
-        # Write to shared robot state
-        # ----------------------------------------------------
+        # ====================================================
+        # WRITE TO SHARED ROBOT STATE
+        # ====================================================
 
         with state.lock:
 
+            # ------------------------------------------------
+            # Camera frame
+            # ------------------------------------------------
+
             state.frame = frame.copy()
 
+            # ------------------------------------------------
+            # Distance
+            # ------------------------------------------------
+
+            state.distance_cm = distance
+
+            # ------------------------------------------------
+            # Tennis ball
+            # ------------------------------------------------
 
             if ball:
 
                 state.ball_detected = True
 
                 state.ball_x = ball["x"]
-
                 state.ball_y = ball["y"]
 
                 state.ball_confidence = (
                     ball["confidence"]
                 )
 
+                state.object_class = "tennis_ball"
+                state.object_direction = direction
 
             else:
 
                 state.ball_detected = False
 
+                state.object_class = None
+                state.object_direction = None
 
         # ----------------------------------------------------
         # Small delay
         # ----------------------------------------------------
 
         time.sleep(0.005)
-
 
     # ========================================================
     # SHUTDOWN
