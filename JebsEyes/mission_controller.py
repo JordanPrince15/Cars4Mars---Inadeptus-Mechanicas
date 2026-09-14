@@ -1,5 +1,6 @@
 from JebsEyes.object_mission import ObjectMission
 from JebsEyes.robot_controller import RobotController
+from JebsEyes.balloon_mission import BalloonMission
 
 
 class MissionController:
@@ -44,9 +45,7 @@ class MissionController:
         # -------------------------------------------------
 
         self.object_mission = ObjectMission()
-
-        # BalloonMission will be added later.
-        self.balloon_mission = None
+        self.balloon_mission = BalloonMission(self.robot)
 
         # -------------------------------------------------
         # Current operating state
@@ -185,6 +184,7 @@ class MissionController:
             )
 
             action = result["action"]
+            
 
             # ---------------------------------------------
             # Send autonomous command
@@ -200,19 +200,26 @@ class MissionController:
         # AUTONOMOUS + BALLOONS
         # -------------------------------------------------
 
-        if self.mission == self.BALLOONS:
+        
+        if mission == self.BALLOONS:
 
-            # BalloonMission will be implemented later.
+            # Run balloon detection once
+            result = self.balloon_mission.process_frame(frame)
 
-            return {
-                "mission": self.BALLOONS,
-                "action": None
-            }
+            detections = result["detections"]
 
-        return {
-            "mission": None,
-            "action": None
-        }
+            # Let BalloonMission decide:
+            # SEEKING → TRACKING → movement command
+            action = self.balloon_mission.update(
+                frame,
+                detections
+            )
+
+            result["action"] = action
+
+            return result
+        
+
 
     # =====================================================
     # STOP ROBOT

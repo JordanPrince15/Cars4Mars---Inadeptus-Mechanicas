@@ -46,7 +46,12 @@ class RobotState:
         self.balloon_class = None
         self.balloon_x = 0
         self.balloon_y = 0
+        self.balloon_width = 0
+        self.balloon_height = 0
         self.balloon_confidence = 0.0
+
+        # All currently detected balloons
+        self.balloon_detections = []
 
         # Current balloon target
         self.balloon_target = "black_balloon"

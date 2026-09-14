@@ -414,6 +414,19 @@ class RoverUI:
                 self.state.object_direction
             )
 
+            balloon_detections = list(
+                self.state.balloon_detections
+            )
+
+            control_mode = self.state.control_mode
+            mission = self.state.mission
+
+        print(
+            f"[UI DEBUG] mode={control_mode} "
+            f"mission={mission} "
+            f"balloons={len(balloon_detections)}"
+        )
+
         # ====================================================
         # BUILD BALL DATA
         # ====================================================
@@ -468,7 +481,7 @@ class RoverUI:
         if frame is not None:
 
             display = frame.copy()
-
+           
             # ------------------------------------------------
             # Tennis ball overlay
             # ------------------------------------------------
@@ -509,9 +522,127 @@ class RoverUI:
                     2
                 )
 
-            # ------------------------------------------------
-            # Convert BGR → RGB
-            # ------------------------------------------------
+            # =================================================
+            # BALLOON DETECTIONS
+            # =================================================
+           
+            if (
+                control_mode == "AUTONOMOUS"
+                and mission == "BALLOONS"
+            ):
+
+                for detection in balloon_detections:
+
+                    x = detection["x"]
+                    y = detection["y"]
+                    width = detection["width"]
+                    height = detection["height"]
+
+                    # Convert centre coordinates into
+                    # top-left / bottom-right coordinates
+
+                    x1 = int(x - width / 2)
+                    y1 = int(y - height / 2)
+
+                    x2 = int(x + width / 2)
+                    y2 = int(y + height / 2)
+
+                    # Keep coordinates inside image
+
+                    x1 = max(0, x1)
+                    y1 = max(0, y1)
+
+                    x2 = min(
+                        display.shape[1] - 1,
+                        x2
+                    )
+
+                    y2 = min(
+                        display.shape[0] - 1,
+                        y2
+                    )
+
+                    # ------------------------------------------------
+                    # Bounding box
+                    # ------------------------------------------------
+
+                    cv2.rectangle(
+                        display,
+                        (x1, y1),
+                        (x2, y2),
+                        (0, 255, 0),
+                        3
+                    )
+
+                    # ------------------------------------------------
+                    # Label
+                    # ------------------------------------------------
+
+                    label = detection["class"].replace(
+                        "_",
+                        " "
+                    ).upper()
+
+                    confidence = detection["confidence"]
+
+                    label_text = (
+                        f"{label} {confidence:.0%}"
+                    )
+
+                    # Get text dimensions
+
+                    (
+                        (text_width, text_height),
+                        baseline
+                    ) = cv2.getTextSize(
+                        label_text,
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        0.7,
+                        2
+                    )
+
+                    label_y = max(
+                        y1,
+                        text_height + baseline + 5
+                    )
+
+                    # Label background
+
+                    cv2.rectangle(
+                        display,
+                        (
+                            x1,
+                            label_y
+                            - text_height
+                            - baseline
+                            - 5
+                        ),
+                        (
+                            x1 + text_width + 10,
+                            label_y
+                        ),
+                        (0, 255, 0),
+                        -1
+                    )
+
+                    # Label text
+
+                    cv2.putText(
+                        display,
+                        label_text,
+                        (
+                            x1 + 5,
+                            label_y - baseline - 2
+                        ),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        0.7,
+                        (0, 0, 0),
+                        2
+                    )
+            
+            # =================================================
+            # NOW convert the completed frame
+            # =================================================
 
             rgb = cv2.cvtColor(
                 display,
@@ -532,6 +663,7 @@ class RoverUI:
                 image=imgtk
             )
 
+            
         # ====================================================
         # RUN AGAIN
         # ====================================================

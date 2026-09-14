@@ -381,6 +381,7 @@ def vision_loop(state, stop_event, camera, mission_controller):
 
         ball = result.get("ball")
         direction = result.get("direction")
+        balloon_detections = result.get("detections", [])
 
         # ====================================================
         # WRITE TO SHARED ROBOT STATE
@@ -407,13 +408,10 @@ def vision_loop(state, stop_event, camera, mission_controller):
             if ball:
 
                 state.ball_detected = True
-
                 state.ball_x = ball["x"]
                 state.ball_y = ball["y"]
 
-                state.ball_confidence = (
-                    ball["confidence"]
-                )
+                state.ball_confidence = (ball["confidence"])
 
                 state.object_class = "tennis_ball"
                 state.object_direction = direction
@@ -421,9 +419,39 @@ def vision_loop(state, stop_event, camera, mission_controller):
             else:
 
                 state.ball_detected = False
-
                 state.object_class = None
                 state.object_direction = None
+
+            # =================================================
+            # BALLOONS
+            # =================================================
+
+            state.balloon_detections = balloon_detections
+
+            if balloon_detections:
+
+                best = max(
+                    balloon_detections,
+                    key=lambda d: d["confidence"]
+                )
+
+                state.balloon_detected = True
+                state.balloon_class = best["class"]
+                state.balloon_x = best["x"]
+                state.balloon_y = best["y"]
+                state.balloon_width = best["width"]
+                state.balloon_height = best["height"]
+                state.balloon_confidence = best["confidence"]
+
+            else:
+
+                state.balloon_detected = False
+                state.balloon_class = None
+                state.balloon_x = 0
+                state.balloon_y = 0
+                state.balloon_width = 0
+                state.balloon_height = 0
+                state.balloon_confidence = 0.0
 
         # ----------------------------------------------------
         # Small delay

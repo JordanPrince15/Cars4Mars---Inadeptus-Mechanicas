@@ -1,7 +1,7 @@
 from ultralytics import YOLO
 
 class HammerDetector:
-    def __init__(self, model_path=r"D:\Trained-dataset\train2\weights\best.pt", conf=0.5):
+    def __init__(self, model_path=r"C:\Users\jorda\OneDrive\Desktop\Engineering projects\Jeb-computer-vision\train2pt", conf=0.5): #change relative path to your trained YOLOv8 model (.pt)
         """
         Initialize the hammer YOLO detector.
         Args:

@@ -44,50 +44,75 @@ class RobotController:
     # =====================================================
     # SEND COMMAND
     # =====================================================
-
-    def send_command(self, command):
+    def makeMovementCommand(self, command):
         """
-        Send a command to the Pico.
+        Send a movement command to the Pico.
 
-        If the Pico is unavailable, use the mock output
-        instead of crashing the program.
+        Supported commands:
+            D [speed]  -> drive forward/backward
+            T L        -> turn left
+            T R        -> turn right
         """
-
-        # -------------------------------------------------
-        # Pico unavailable
-        # -------------------------------------------------
 
         if self.pico is None:
-            print(
-                f"[MOCK PICO] Action: {command}"
-            )
+            print(f"[MOCK PICO] Movement command: {command}")
             return False
 
-        # -------------------------------------------------
-        # Pico available
-        # -------------------------------------------------
-
         try:
-
             message = f"{command}\n"
-
-            self.pico.write(
-                message.encode()
-            )
-
+            self.pico.write(message.encode())
             self.pico.flush()
 
+            print(f"[PICO] Sent: {command}")
             return True
 
         except Exception as e:
-
-            print(
-                f"❌ Pico connection lost during runtime: {e}"
-            )
-
+            print(f"❌ Failed to send movement command: {e}")
             self.pico = None
-
             return False
+    # def send_command(self, command):
+    #     """
+    #     Send a command to the Pico.
+
+    #     If the Pico is unavailable, use the mock output
+    #     instead of crashing the program.
+    #     """
+
+    #     # -------------------------------------------------
+    #     # Pico unavailable
+    #     # -------------------------------------------------
+
+    #     if self.pico is None:
+    #         print(
+    #             f"[PICO] Action: {command}"
+    #         )
+    #         return False
+
+    #     # -------------------------------------------------
+    #     # Pico available
+    #     # -------------------------------------------------
+
+    #     try:
+
+    #         message = f"{command}\n"
+
+    #         self.pico.write(
+    #             message.encode()
+    #         )
+
+    #         self.pico.flush()
+
+    #         return True
+
+    #     except Exception as e:
+
+    #         print(
+    #             f"❌ Pico connection lost during runtime: {e}"
+    #         )
+
+    #         self.pico = None
+
+    #         return False
 
     # =====================================================
     # CLOSE
