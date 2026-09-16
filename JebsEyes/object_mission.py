@@ -3,10 +3,12 @@ import cv2
 from JebsEyes.hsv_ball import detect_tennis_ball_via_colour
 from JebsEyes.yolo_ball import TennisBallDetector
 from JebsEyes.hammer_yolo import HammerDetector 
+from JebsEyes.cone_yolo import ConeDetector
 from JebsEyes.fusion import fuse_detections
 
 
 class ObjectMission:
+    TEST_HAMMER = True
     """
     Handles the autonomous object-detection mission.
 
@@ -25,6 +27,7 @@ class ObjectMission:
         # =================================================
         self.hammer_detector = HammerDetector()
         self.tennis_detector = TennisBallDetector()
+        self.cone_detector = ConeDetector()
 
         # Last successful YOLO detection.
         # We keep this between frames because YOLO does not
@@ -49,13 +52,13 @@ class ObjectMission:
     # =====================================================
 
     def detect(self, frame):
-        """
-        Detect a tennis ball in the supplied frame.
 
-        Returns:
-            Ball detection dictionary, or None.
         """
-
+            Detect a tennis ball in the supplied frame.
+        
+            Returns:
+                Ball detection dictionary, or None.
+        """
         # -------------------------------------------------
         # HSV detection
         # -------------------------------------------------
@@ -116,6 +119,7 @@ class ObjectMission:
         )
 
         return ball
+
 
     # =====================================================
     # POSITION
@@ -193,37 +197,175 @@ class ObjectMission:
     # PROCESS FRAME
     # =====================================================
 
+
     def process_frame(self, frame):
         """
-        Complete object-mission processing for one frame.
+        Runs the tennis-ball, hammer, and traffic-cone detectors.
 
-        Returns:
-            {
-                "ball": detection or None,
-                "direction": "LEFT"/"CENTRE"/"RIGHT"/None,
-                "action": "LEFT"/"RIGHT"/"CENTRE"/None
-            }
+        Each detected object is drawn on the frame and classified
+        as LEFT, CENTER, or RIGHT based on its horizontal position.
         """
+
+        # ==================================================
+        # TENNIS BALL
+        # ==================================================
 
         ball = self.detect(frame)
 
-        if ball is not None:
-            direction = self.get_direction(
-                ball["x"],
-                frame.shape[1]
+        # ==================================================
+        # HAMMER + CONE
+        # ==================================================
+
+        hammers = self.hammer_detector.detect(frame)
+        cones = self.cone_detector.detect(frame)
+
+        # ==================================================
+        # HELPER: DETERMINE LEFT / CENTER / RIGHT
+        # ==================================================
+
+        screen_width = frame.shape[1]
+
+        def get_position(x):
+            if x < screen_width / 3:
+                return "LEFT"
+            elif x < 2 * screen_width / 3:
+                return "CENTER"
+            else:
+                return "RIGHT"
+
+        # ==================================================
+        # DRAW TENNIS BALL
+        # ==================================================
+
+        if ball:
+
+            x = ball["x"]
+            y = ball["y"]
+            size = ball["size"]
+            confidence = ball["confidence"]
+
+            position = get_position(x)
+
+            radius = max(5, int(size / 2))
+
+            cv2.circle(
+                frame,
+                (x, y),
+                radius,
+                (0, 255, 0),
+                3
             )
 
-            action = self.get_action(
-                ball,
-                frame.shape[1]
+            label = f"TENNIS BALL {confidence:.0%} - {position}"
+
+            cv2.putText(
+                frame,
+                label,
+                (max(5, x - radius), max(30, y - radius - 10)),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.65,
+                (0, 255, 0),
+                2
             )
 
-        else:
-            direction = None
-            action = None
+        # ==================================================
+        # DRAW HAMMERS
+        # ==================================================
+
+        for detection in hammers:
+
+            x = detection["x"]
+            y = detection["y"]
+            width = detection["width"]
+            height = detection["height"]
+            confidence = detection["confidence"]
+
+            position = get_position(x)
+
+            x1 = int(x - width / 2)
+            y1 = int(y - height / 2)
+            x2 = int(x + width / 2)
+            y2 = int(y + height / 2)
+
+            x1 = max(0, x1)
+            y1 = max(0, y1)
+            x2 = min(frame.shape[1] - 1, x2)
+            y2 = min(frame.shape[0] - 1, y2)
+
+            cv2.rectangle(
+                frame,
+                (x1, y1),
+                (x2, y2),
+                (0, 0, 255),
+                3
+            )
+
+            label = f"HAMMER {confidence:.0%} - {position}"
+
+            cv2.putText(
+                frame,
+                label,
+                (x1, max(30, y1 - 10)),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.65,
+                (0, 0, 255),
+                2
+            )
+
+        # ==================================================
+        # DRAW TRAFFIC CONES
+        # ==================================================
+
+        for detection in cones:
+
+            x = detection["x"]
+            y = detection["y"]
+            width = detection["width"]
+            height = detection["height"]
+            confidence = detection["confidence"]
+
+            position = get_position(x)
+
+            x1 = int(x - width / 2)
+            y1 = int(y - height / 2)
+            x2 = int(x + width / 2)
+            y2 = int(y + height / 2)
+
+            x1 = max(0, x1)
+            y1 = max(0, y1)
+            x2 = min(frame.shape[1] - 1, x2)
+            y2 = min(frame.shape[0] - 1, y2)
+
+            cv2.rectangle(
+                frame,
+                (x1, y1),
+                (x2, y2),
+                (0, 165, 255),
+                3
+            )
+
+            label = f"TRAFFIC CONE {confidence:.0%} - {position}"
+
+            cv2.putText(
+                frame,
+                label,
+                (x1, max(30, y1 - 10)),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.65,
+                (0, 165, 255),
+                2
+            )
+
+        # ==================================================
+        # RETURN EVERYTHING
+        # ==================================================
 
         return {
             "ball": ball,
-            "direction": direction,
-            "action": action
+            "direction": get_position(ball["x"]) if ball else None,
+            "action": None,
+            "hammers": hammers,
+            "cones": cones
         }
+
+

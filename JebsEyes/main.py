@@ -381,6 +381,7 @@ def vision_loop(state, stop_event, camera, mission_controller):
 
         ball = result.get("ball")
         direction = result.get("direction")
+        hammers = result.get("hammers", [])
         balloon_detections = result.get("detections", [])
 
         # ====================================================
@@ -404,6 +405,7 @@ def vision_loop(state, stop_event, camera, mission_controller):
             # ------------------------------------------------
             # Tennis ball
             # ------------------------------------------------
+        
 
             if ball:
 

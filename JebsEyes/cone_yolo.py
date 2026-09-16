@@ -1,46 +1,37 @@
-
 from ultralytics import YOLO
 
 
-class HammerDetector:
+class ConeDetector:
 
     def __init__(
         self,
-        model_path=r"D:\Trained-dataset\train2\weights\best.pt",
+        model_path=r"D:\Trained-dataset\traffic cone dataset\runs\detect\train\weights\best.pt",
         conf=0.5
     ):
         """
-        Initialize the hammer YOLO detector.
+        Initialize the traffic cone YOLO detector.
 
         Args:
             model_path: Path to the trained YOLO model.
-            conf: Minimum confidence required for a detection.
+            conf: Minimum confidence threshold.
         """
 
         self.model = YOLO(model_path)
         self.conf = conf
 
-        print("✓ Hammer detector initialized.")
+        print("✓ Cone detector initialized.")
         print(f"  Model: {model_path}")
         print(f"  Confidence threshold: {conf}")
 
     def detect(self, frame):
         """
-        Detect hammers in a single frame.
+        Detect traffic cones in a single frame.
 
         Args:
             frame: BGR image from OpenCV.
 
         Returns:
-            List of detection dictionaries.
-
-        Each detection contains:
-            class
-            confidence
-            x
-            y
-            width
-            height
+            List of cone detection dictionaries.
         """
 
         results = self.model.predict(
@@ -73,14 +64,16 @@ class HammerDetector:
                 confidence.item()
             )
 
+            # Centre coordinates
             x = (x1 + x2) // 2
             y = (y1 + y2) // 2
 
+            # Bounding-box dimensions
             width = x2 - x1
             height = y2 - y1
 
             detections.append({
-                "class": "hammer",
+                "class": "traffic_cone",
                 "confidence": confidence,
                 "x": x,
                 "y": y,
