@@ -1,13 +1,11 @@
 import tkinter as tk
-
-from PIL import Image, ImageTk
-
-import cv2
+import webbrowser
 import threading
 
 from JebsEyes.robot_state import RobotState
-from JebsEyes.main import CameraManager, vision_loop
+from JebsEyes.main import CAPTURE_DIR, CameraManager, vision_loop
 from JebsEyes.ui.panda_panel import PandaApp
+from JebsEyes.ui.web_viewer import AnnotatedFrameBroker, start_web_viewer
 from JebsEyes.mission_controller import MissionController
 
 
@@ -52,6 +50,28 @@ class RoverUI:
         self.camera = CameraManager()
 
         # ====================================================
+        # ANNOTATED WEB FEED
+        # ====================================================
+
+        self.frame_broker = AnnotatedFrameBroker(
+            CAPTURE_DIR
+        )
+
+        self.web_server, self.viewer_urls = start_web_viewer(
+            self.frame_broker,
+            self.state,
+            self.camera,
+            self.mission_controller
+        )
+
+        self.root.after(
+            800,
+            lambda: webbrowser.open(
+                self.viewer_urls["local"]
+            )
+        )
+
+        # ====================================================
         # VISION THREAD
         # ====================================================
 
@@ -61,7 +81,8 @@ class RoverUI:
                 self.state,
                 self.stop_event,
                 self.camera,
-                self.mission_controller
+                self.mission_controller,
+                self.frame_broker
             ),
             daemon=True
         )
@@ -195,17 +216,42 @@ class RoverUI:
         )
 
         # ----------------------------------------------------
-        # Video display
+        # Web feed status
+        #
+        # The annotated FPV view now lives in the browser
+        # so this window does not get captured and re-drawn.
         # ----------------------------------------------------
 
         self.video_label = tk.Label(
             left_frame,
-            bg="black"
+            text=(
+                "Annotated FPV feed is in the browser.\n"
+                f"{self.viewer_urls['local']}\n"
+                f"{self.viewer_urls['lan']}"
+            ),
+            font=("Arial", 14),
+            bg="black",
+            fg="white",
+            justify="center"
         )
 
         self.video_label.pack(
             padx=20,
-            pady=20
+            pady=20,
+            fill="both",
+            expand=True
+        )
+
+        self.open_feed_button = tk.Button(
+            left_frame,
+            text="Open annotated feed",
+            command=lambda: webbrowser.open(
+                self.viewer_urls["local"]
+            )
+        )
+
+        self.open_feed_button.pack(
+            pady=5
         )
 
         # ----------------------------------------------------
@@ -397,8 +443,6 @@ class RoverUI:
 
         with self.state.lock:
 
-            frame = self.state.frame
-
             detected_ball = (
                 self.state.ball_detected
             )
@@ -406,41 +450,24 @@ class RoverUI:
             x = self.state.ball_x
             y = self.state.ball_y
 
-            confidence = (
-                self.state.ball_confidence
-            )
-
-            direction = (
-                self.state.object_direction
-            )
-
-            balloon_detections = list(
-                self.state.balloon_detections
-            )
-
             control_mode = self.state.control_mode
             mission = self.state.mission
 
-        print(
-            f"[UI DEBUG] mode={control_mode} "
-            f"mission={mission} "
-            f"balloons={len(balloon_detections)}"
+        last_archive = self.frame_broker.last_archive_name
+
+        self.video_label.config(
+            text=(
+                "Annotated FPV feed is in the browser.\n"
+                f"{self.viewer_urls['local']}\n"
+                f"{self.viewer_urls['lan']}\n\n"
+                f"MODE: {control_mode} | {mission}\n"
+                + (
+                    f"Last screenshot: {last_archive}"
+                    if last_archive
+                    else "Waiting for first annotated frame..."
+                )
+            )
         )
-
-        # ====================================================
-        # BUILD BALL DATA
-        # ====================================================
-
-        ball = None
-
-        if detected_ball:
-
-            ball = {
-                "x": x,
-                "y": y,
-                "size": 20,
-                "confidence": confidence
-            }
 
         # ====================================================
         # UPDATE 3D VIEW
@@ -475,201 +502,11 @@ class RoverUI:
             self.panda.sim.ball_node.hide()
 
         # ====================================================
-        # UPDATE VIDEO FEED
-        # ====================================================
-
-        if frame is not None:
-
-            display = frame.copy()
-           
-            # ------------------------------------------------
-            # Tennis ball overlay
-            # ------------------------------------------------
-
-            if ball:
-
-                cv2.circle(
-                    display,
-                    (
-                        ball["x"],
-                        ball["y"]
-                    ),
-                    ball["size"],
-                    (0, 255, 0),
-                    2
-                )
-
-                cv2.putText(
-                    display,
-                    (
-                        f"Tennis Ball "
-                        f"{ball['confidence']:.2f}"
-                    ),
-                    (10, 30),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    1,
-                    (0, 255, 0),
-                    2
-                )
-
-                cv2.putText(
-                    display,
-                    f"Direction: {direction}",
-                    (10, 110),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    1,
-                    (0, 255, 0),
-                    2
-                )
-
-            # =================================================
-            # BALLOON DETECTIONS
-            # =================================================
-           
-            if (
-                control_mode == "AUTONOMOUS"
-                and mission == "BALLOONS"
-            ):
-
-                for detection in balloon_detections:
-
-                    x = detection["x"]
-                    y = detection["y"]
-                    width = detection["width"]
-                    height = detection["height"]
-
-                    # Convert centre coordinates into
-                    # top-left / bottom-right coordinates
-
-                    x1 = int(x - width / 2)
-                    y1 = int(y - height / 2)
-
-                    x2 = int(x + width / 2)
-                    y2 = int(y + height / 2)
-
-                    # Keep coordinates inside image
-
-                    x1 = max(0, x1)
-                    y1 = max(0, y1)
-
-                    x2 = min(
-                        display.shape[1] - 1,
-                        x2
-                    )
-
-                    y2 = min(
-                        display.shape[0] - 1,
-                        y2
-                    )
-
-                    # ------------------------------------------------
-                    # Bounding box
-                    # ------------------------------------------------
-
-                    cv2.rectangle(
-                        display,
-                        (x1, y1),
-                        (x2, y2),
-                        (0, 255, 0),
-                        3
-                    )
-
-                    # ------------------------------------------------
-                    # Label
-                    # ------------------------------------------------
-
-                    label = detection["class"].replace(
-                        "_",
-                        " "
-                    ).upper()
-
-                    confidence = detection["confidence"]
-
-                    label_text = (
-                        f"{label} {confidence:.0%}"
-                    )
-
-                    # Get text dimensions
-
-                    (
-                        (text_width, text_height),
-                        baseline
-                    ) = cv2.getTextSize(
-                        label_text,
-                        cv2.FONT_HERSHEY_SIMPLEX,
-                        0.7,
-                        2
-                    )
-
-                    label_y = max(
-                        y1,
-                        text_height + baseline + 5
-                    )
-
-                    # Label background
-
-                    cv2.rectangle(
-                        display,
-                        (
-                            x1,
-                            label_y
-                            - text_height
-                            - baseline
-                            - 5
-                        ),
-                        (
-                            x1 + text_width + 10,
-                            label_y
-                        ),
-                        (0, 255, 0),
-                        -1
-                    )
-
-                    # Label text
-
-                    cv2.putText(
-                        display,
-                        label_text,
-                        (
-                            x1 + 5,
-                            label_y - baseline - 2
-                        ),
-                        cv2.FONT_HERSHEY_SIMPLEX,
-                        0.7,
-                        (0, 0, 0),
-                        2
-                    )
-            
-            # =================================================
-            # NOW convert the completed frame
-            # =================================================
-
-            rgb = cv2.cvtColor(
-                display,
-                cv2.COLOR_BGR2RGB
-            )
-
-            img = Image.fromarray(
-                rgb
-            )
-
-            imgtk = ImageTk.PhotoImage(
-                image=img
-            )
-
-            self.video_label.imgtk = imgtk
-
-            self.video_label.configure(
-                image=imgtk
-            )
-
-            
-        # ====================================================
         # RUN AGAIN
         # ====================================================
 
         self.root.after(
-            15,
+            250,
             self.update_ui
         )
 

@@ -20,6 +20,13 @@ class RobotState:
         # =================================================
 
         self.frame = None
+        # Camera frame before detection overlays are drawn.
+        self.raw_frame = None
+
+        # live = object detection is running
+        # train = Train page is open; detectors stay off
+        self.ui_mode = "live"
+        self.detection_enabled = True
 
         # Tennis ball
         self.ball_detected = False

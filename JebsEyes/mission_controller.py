@@ -163,62 +163,56 @@ class MissionController:
 
 
         # -------------------------------------------------
-        # MANUAL MODE
+        # OBJECTS
+        #
+        # Detection and on-frame annotation always run so
+        # the FPV / screen viewer stays labelled.
+        # Robot commands are only sent in AUTONOMOUS.
         # -------------------------------------------------
 
-        if self.control_mode == self.MANUAL:
-
-            return {
-                "mission": None,
-                "action": None
-            }
-
-        # -------------------------------------------------
-        # AUTONOMOUS + OBJECTS
-        # -------------------------------------------------
-
-        if self.mission == self.OBJECTS:
+        if mission == self.OBJECTS:
 
             result = self.object_mission.process_frame(
                 frame
             )
 
             action = result["action"]
-            
 
-            # ---------------------------------------------
-            # Send autonomous command
-            # ---------------------------------------------
-
-            if action in ("LEFT", "RIGHT"):
+            if (
+                control_mode == self.AUTONOMOUS
+                and action in ("LEFT", "RIGHT")
+            ):
 
                 self.robot.send_command(action)
 
             return result
 
         # -------------------------------------------------
-        # AUTONOMOUS + BALLOONS
+        # BALLOONS
         # -------------------------------------------------
 
-        
         if mission == self.BALLOONS:
 
-            # Run balloon detection once
             result = self.balloon_mission.process_frame(frame)
 
             detections = result["detections"]
+            action = None
 
-            # Let BalloonMission decide:
-            # SEEKING → TRACKING → movement command
-            action = self.balloon_mission.update(
-                frame,
-                detections
-            )
+            if control_mode == self.AUTONOMOUS:
+
+                action = self.balloon_mission.update(
+                    frame,
+                    detections
+                )
 
             result["action"] = action
 
             return result
-        
+
+        return {
+            "mission": None,
+            "action": None
+        }
 
 
     # =====================================================

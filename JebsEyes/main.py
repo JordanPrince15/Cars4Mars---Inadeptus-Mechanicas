@@ -1,8 +1,10 @@
 import cv2
 import time
+from pathlib import Path
 
 from JebsEyes.mission_controller import MissionController
 from JebsEyes.network_camera import NetworkCamera
+from JebsEyes.screen_camera import ScreenCamera
 
 
 # ============================================================
@@ -13,11 +15,22 @@ from JebsEyes.network_camera import NetworkCamera
 # How to run: python -m JebsEyes.ui.main_ui
 # "auto"    -> Try network camera first, then laptop webcam
 # "network" -> Raspberry Pi network camera
-
 # "webcam"  -> Laptop webcam
+# "screen"  -> Capture the FPV feed from the desktop
 # "off"     -> No camera
 #
-CAMERA_MODE = "webcam"  # Change this to "network" for Raspberry Pi camera, "webcam" for laptop webcam, or "off" to disable camera
+CAMERA_MODE = "screen"
+
+
+# Which monitor to capture. 1 is the primary display.
+# 0 captures every monitor as one image.
+SCREEN_MONITOR = 1
+
+# Downscale wide desktops so YOLO stays usable.
+SCREEN_MAX_WIDTH = 1280
+
+# Annotated screenshots are written here.
+CAPTURE_DIR = Path(__file__).resolve().parents[1] / "captures"
 
 
 # Raspberry Pi camera stream
@@ -86,6 +99,48 @@ class CameraManager:
             except Exception as e:
 
                 print(f"✗ Network camera failed: {e}")
+
+                self.camera = None
+                self.active_mode = None
+
+            return
+
+
+        # ================================================
+        # SCREEN CAPTURE (FPV)
+        # ================================================
+
+        if self.mode == "screen":
+
+            print("Capturing desktop / FPV screen...")
+
+            try:
+
+                self.camera = ScreenCamera(
+                    monitor=SCREEN_MONITOR,
+                    max_width=SCREEN_MAX_WIDTH
+                )
+
+                ret, frame = self.camera.read()
+
+                if not ret or frame is None:
+
+                    print("✗ Screen capture produced no frame.")
+
+                    self.camera.release()
+
+                    self.camera = None
+                    self.active_mode = None
+
+                    return
+
+                self.active_mode = "screen"
+
+                print("✓ Screen capture selected.")
+
+            except Exception as e:
+
+                print(f"✗ Screen capture failed: {e}")
 
                 self.camera = None
                 self.active_mode = None
@@ -261,8 +316,21 @@ class CameraManager:
 
 
         # ----------------------------------------------------
-        # Laptop webcam
+        # Screen capture
         # ----------------------------------------------------
+
+        if self.active_mode == "screen":
+
+            ret, frame = self.camera.read()
+
+            if not ret or frame is None:
+
+                raise ConnectionError(
+                    "Screen capture failed."
+                )
+
+            return frame, None
+
 
         if self.active_mode == "webcam":
 
@@ -336,7 +404,43 @@ class CameraManager:
 # VISION LOOP
 # ============================================================
 
-def vision_loop(state, stop_event, camera, mission_controller):
+def _draw_balloon_overlays(frame, detections):
+    for detection in detections:
+        x = detection["x"]
+        y = detection["y"]
+        width = detection["width"]
+        height = detection["height"]
+
+        x1 = max(0, int(x - width / 2))
+        y1 = max(0, int(y - height / 2))
+        x2 = min(frame.shape[1] - 1, int(x + width / 2))
+        y2 = min(frame.shape[0] - 1, int(y + height / 2))
+
+        cv2.rectangle(
+            frame,
+            (x1, y1),
+            (x2, y2),
+            (0, 255, 0),
+            3
+        )
+
+        label = (
+            detection["class"].replace("_", " ").upper()
+            + f" {detection['confidence']:.0%}"
+        )
+
+        cv2.putText(
+            frame,
+            label,
+            (x1, max(30, y1 - 10)),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.65,
+            (0, 255, 0),
+            2
+        )
+
+
+def vision_loop(state, stop_event, camera, mission_controller, frame_broker=None):
     print()
     print("==============================")
     print("       JEB VISION THREAD")
@@ -369,6 +473,29 @@ def vision_loop(state, stop_event, camera, mission_controller):
 
             continue
 
+        with state.lock:
+            detecting = getattr(state, "detection_enabled", True)
+
+        # Keep a copy without detection overlays for venue training.
+        raw_frame = frame.copy()
+
+        # Train mode skips YOLO / balloon inference so the
+        # camera is only used for grab-live snapshots.
+        if not detecting:
+            with state.lock:
+                state.frame = raw_frame.copy()
+                state.raw_frame = raw_frame
+                state.distance_cm = distance
+                state.ball_detected = False
+                state.object_class = None
+                state.object_direction = None
+                state.balloon_detected = False
+                state.balloon_class = None
+                state.balloon_detections = []
+
+            time.sleep(0.2)
+            continue
+
         # ----------------------------------------------------
         # Process frame through MissionController
         # ----------------------------------------------------
@@ -384,6 +511,12 @@ def vision_loop(state, stop_event, camera, mission_controller):
         hammers = result.get("hammers", [])
         balloon_detections = result.get("detections", [])
 
+        if balloon_detections:
+            _draw_balloon_overlays(frame, balloon_detections)
+
+        if frame_broker is not None:
+            frame_broker.publish(frame)
+
         # ====================================================
         # WRITE TO SHARED ROBOT STATE
         # ====================================================
@@ -395,6 +528,7 @@ def vision_loop(state, stop_event, camera, mission_controller):
             # ------------------------------------------------
 
             state.frame = frame.copy()
+            state.raw_frame = raw_frame
 
             # ------------------------------------------------
             # Distance

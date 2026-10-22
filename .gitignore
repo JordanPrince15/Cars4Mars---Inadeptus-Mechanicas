@@ -1,0 +1,16 @@
+# Runtime camera captures (annotated screenshots, latest frame)
+captures/
+
+# Venue-day labelled photos, YOLO dataset, and fine-tune weights
+captures/venue-train/
+
+# Older local hammer training run
+train2/
+
+# Custom trained weights if copied into this repo
+Trained-dataset/
+*.pt
+
+# Python cache
+__pycache__/
+*.pyc

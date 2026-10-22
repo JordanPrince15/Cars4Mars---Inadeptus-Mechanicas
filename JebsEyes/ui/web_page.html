@@ -1,0 +1,692 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Jeb Eyes</title>
+  <style>
+    :root {
+      --bg: #101418;
+      --panel: #1b2128;
+      --line: #2d3844;
+      --text: #e8eef4;
+      --muted: #93a1b0;
+      --accent: #3dd68c;
+      --warn: #ffb020;
+      --danger: #ff6b6b;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+      padding: 16px 22px;
+      border-bottom: 1px solid var(--line);
+      background: var(--panel);
+    }
+    h1 { margin: 0; font-size: 20px; }
+    h2 { margin: 0 0 10px; font-size: 15px; }
+    .sub { color: var(--muted); font-size: 13px; margin-top: 4px; }
+    .brand { min-width: 180px; }
+    .tabs { display: flex; gap: 8px; }
+    .tab {
+      background: #24303b;
+      color: var(--text);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 8px 14px;
+      cursor: pointer;
+      text-decoration: none;
+    }
+    .tab.active {
+      border-color: var(--accent);
+      background: #163527;
+      color: var(--accent);
+    }
+    .actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    button, select, input, label.file {
+      background: #24303b;
+      color: var(--text);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 8px 12px;
+      cursor: pointer;
+    }
+    input[type="text"], input[type="number"] { cursor: text; min-width: 140px; }
+    button:hover, .tab:hover, label.file:hover { border-color: var(--accent); }
+    button.active {
+      border-color: var(--accent);
+      background: #163527;
+      color: var(--accent);
+    }
+    button.primary {
+      background: #163527;
+      border-color: var(--accent);
+      color: var(--accent);
+      font-weight: 600;
+    }
+    button:disabled, label.file.disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    button.danger { border-color: var(--danger); color: var(--danger); }
+    main.page { display: grid; gap: 16px; padding: 16px; }
+    main.page[hidden],
+    #live-actions[hidden],
+    #anno-wrap[hidden],
+    #anno-empty[hidden] {
+      display: none !important;
+    }
+    #page-live { grid-template-columns: 1fr 320px; }
+    #page-train { grid-template-columns: 1fr 340px; }
+    .feed, .anno-card {
+      background: #000;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      min-height: 360px;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .feed img { width: 100%; display: block; }
+    .side, .train-side { display: flex; flex-direction: column; gap: 12px; }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 14px;
+    }
+    .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+    .chip {
+      border-radius: 999px;
+      padding: 4px 10px;
+      font-size: 12px;
+      background: #24303b;
+      color: var(--muted);
+    }
+    .chip.on { background: #163527; color: var(--accent); }
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+    .grid img {
+      width: 100%;
+      border-radius: 8px;
+      border: 1px solid var(--line);
+    }
+    .note { color: var(--warn); font-size: 12px; line-height: 1.4; }
+    .field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
+    .field label { font-size: 12px; color: var(--muted); }
+    .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .anno-wrap {
+      position: relative;
+      display: inline-block;
+      max-width: 100%;
+    }
+    .anno-wrap img { max-width: 100%; max-height: 70vh; display: block; }
+    .anno-wrap canvas {
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      cursor: crosshair;
+    }
+    .empty {
+      color: var(--muted);
+      padding: 40px 20px;
+      text-align: center;
+    }
+    .thumbs { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; max-height: 280px; overflow: auto; }
+    .thumb {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      overflow: hidden;
+      cursor: pointer;
+      position: relative;
+    }
+    .thumb.selected { border-color: var(--accent); }
+    .thumb img { width: 100%; display: block; }
+    .thumb .badge {
+      position: absolute;
+      right: 6px;
+      top: 6px;
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 999px;
+      background: #24303b;
+      color: var(--muted);
+    }
+    .thumb .badge.ok { background: #163527; color: var(--accent); }
+    .log {
+      background: #0c1014;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 8px;
+      height: 160px;
+      overflow: auto;
+      font-size: 12px;
+      white-space: pre-wrap;
+      color: var(--muted);
+    }
+    @media (max-width: 900px) {
+      #page-live, #page-train { grid-template-columns: 1fr; }
+      header { flex-wrap: wrap; }
+    }
+  </style>
+</head>
+<body data-start="live">
+  <header>
+    <div class="brand">
+      <h1>Jeb Eyes</h1>
+      <div class="sub" id="header-sub">Live screen capture with object overlays</div>
+    </div>
+    <div class="tabs">
+      <button class="tab active" data-page="live" id="tab-live">Live Detect</button>
+      <button class="tab" data-page="train" id="tab-train">Train</button>
+    </div>
+    <div class="actions" id="live-actions">
+      <button id="start-shots">Start screenshots</button>
+      <button id="stop-shots">Stop screenshots</button>
+      <select id="monitor"></select>
+      <button id="save">Save screenshot</button>
+    </div>
+  </header>
+
+  <main class="page" id="page-live">
+    <section class="feed">
+      <img id="live" alt="Annotated live feed">
+    </section>
+    <aside class="side">
+      <div class="card">
+        <div class="chips">
+          <span class="chip" id="mode">MODE</span>
+          <span class="chip" id="mission">MISSION</span>
+          <span class="chip" id="source">SOURCE</span>
+          <span class="chip" id="ball">BALL</span>
+          <span class="chip" id="object">OBJECT</span>
+        </div>
+      </div>
+      <div class="card note">
+        If this page is on the same monitor you are capturing,
+        open it on another screen so Jeb does not annotate itself.
+      </div>
+      <div class="card">
+        <div class="sub" id="last-save">No screenshots yet</div>
+        <div class="grid" id="gallery"></div>
+      </div>
+    </aside>
+  </main>
+
+  <main class="page" id="page-train" hidden>
+    <section class="anno-card" id="anno-card">
+      <div class="empty" id="anno-empty">
+        Upload a few photos of the object, then drag a box around it.
+      </div>
+      <div class="anno-wrap" id="anno-wrap" hidden>
+        <img id="anno-img" alt="Training image">
+        <canvas id="anno-canvas"></canvas>
+      </div>
+    </section>
+    <aside class="train-side">
+      <div class="card">
+        <h2>1. Name the item</h2>
+        <div class="field">
+          <label for="class-name">One class for this set, e.g. hammer</label>
+          <input id="class-name" type="text" value="hammer">
+        </div>
+      </div>
+      <div class="card">
+        <h2>2. Add photos</h2>
+        <div class="row">
+          <label class="file">
+            Upload images
+            <input id="file-input" type="file" accept="image/*" multiple hidden>
+          </label>
+          <button id="grab-live">Grab live frame</button>
+        </div>
+        <div class="sub" id="image-count" style="margin-top:8px;">No images yet</div>
+        <div class="thumbs" id="thumbs"></div>
+      </div>
+      <div class="card">
+        <h2>3. Draw the box</h2>
+        <div class="sub">Click an image, then drag on it to mark the object.</div>
+        <div class="row" style="margin-top:8px;">
+          <button id="delete-image" class="danger">Remove image</button>
+        </div>
+      </div>
+      <div class="card">
+        <h2>4. Fine-tune</h2>
+        <div class="field">
+          <label for="epochs">Epochs (15 is a good venue-day start)</label>
+          <input id="epochs" type="number" min="1" max="80" value="15">
+        </div>
+        <button class="primary" id="train-btn">Fine-tune / Train</button>
+        <div class="sub" id="train-status" style="margin-top:8px;">Idle</div>
+        <div class="log" id="train-log"></div>
+      </div>
+    </aside>
+  </main>
+
+  <script>
+    const startPage = document.body.dataset.start || "live";
+    const MONITOR_KEY = "jeb.selectedMonitor";
+    let currentPage = null;
+    let liveStreamOn = false;
+    let livePollTimer = null;
+    let trainImages = [];
+    let currentId = null;
+    let drawing = false;
+    let dragStart = null;
+    let currentBox = null;
+
+    function startLiveStream() {
+      if (livePollTimer) {
+        clearInterval(livePollTimer);
+        livePollTimer = null;
+      }
+
+      liveStreamOn = true;
+      const img = document.getElementById("live");
+
+      let liveBumpBusy = false;
+      const bump = async () => {
+        if (!liveStreamOn || liveBumpBusy) {
+          return;
+        }
+
+        liveBumpBusy = true;
+
+        try {
+          const res = await fetch(
+            "/api/latest.jpg?t=" + Date.now(),
+            { cache: "no-store" }
+          );
+
+          if (!liveStreamOn || !res.ok || res.status === 204) {
+            return;
+          }
+
+          const blob = await res.blob();
+          if (!liveStreamOn) {
+            return;
+          }
+
+          const url = URL.createObjectURL(blob);
+          const previous = img.dataset.blobUrl;
+          img.src = url;
+          img.dataset.blobUrl = url;
+
+          if (previous) {
+            URL.revokeObjectURL(previous);
+          }
+        } catch (error) {
+          // Keep polling; the camera may not have published a frame yet.
+        } finally {
+          liveBumpBusy = false;
+        }
+      };
+
+      bump();
+      livePollTimer = setInterval(bump, 80);
+    }
+
+    function stopLiveStream() {
+      liveStreamOn = false;
+
+      if (livePollTimer) {
+        clearInterval(livePollTimer);
+        livePollTimer = null;
+      }
+    }
+
+    function showPage(name) {
+      const wasLive = currentPage === "live";
+      currentPage = name;
+
+      document.getElementById("page-live").hidden = name !== "live";
+      document.getElementById("page-train").hidden = name !== "train";
+      document.getElementById("live-actions").hidden = name !== "live";
+      document.getElementById("tab-live").classList.toggle("active", name === "live");
+      document.getElementById("tab-train").classList.toggle("active", name === "train");
+      document.getElementById("header-sub").textContent =
+        name === "train"
+          ? "Venue setup: label a few camera shots, then fine-tune"
+          : "Live screen capture with object overlays";
+      history.replaceState({}, "", name === "train" ? "/train" : "/");
+
+      if (wasLive && name !== "live") {
+        stopLiveStream();
+      }
+
+      if (name === "live" && !liveStreamOn) {
+        startLiveStream();
+      }
+
+      if (name === "train") {
+        refreshTrain();
+      }
+
+      fetch("/api/ui-mode/" + name, { method: "POST" });
+    }
+
+    document.getElementById("tab-live").addEventListener("click", () => showPage("live"));
+    document.getElementById("tab-train").addEventListener("click", () => showPage("train"));
+
+    async function refreshStatus() {
+      const res = await fetch("/api/status");
+      const data = await res.json();
+      setChip("mode", data.control_mode, true);
+      setChip("mission", data.mission, true);
+      setChip("source", data.source || "none", !!data.source);
+      setChip("ball", data.ball_detected ? "BALL YES" : "BALL NO", data.ball_detected);
+      setChip("object", data.object_class || "NO OBJECT", !!data.object_class);
+      if (data.last_archive) {
+        document.getElementById("last-save").textContent =
+          "Last saved: " + data.last_archive;
+      }
+      setArchivingButtons(!!data.archiving);
+    }
+
+    function setArchivingButtons(archiving) {
+      document.getElementById("start-shots").classList.toggle("active", archiving);
+      document.getElementById("stop-shots").classList.toggle("active", !archiving);
+    }
+
+    function setChip(id, text, on) {
+      const el = document.getElementById(id);
+      el.textContent = text;
+      el.classList.toggle("on", on);
+    }
+
+    async function refreshGallery() {
+      const res = await fetch("/api/captures");
+      const items = await res.json();
+      const gallery = document.getElementById("gallery");
+      gallery.innerHTML = items.map(item =>
+        `<a href="${item.url}" target="_blank">
+           <img src="${item.url}" alt="${item.name}">
+         </a>`
+      ).join("");
+    }
+
+    async function loadMonitors() {
+      const res = await fetch("/api/monitors");
+      const monitors = await res.json();
+      const select = document.getElementById("monitor");
+      const saved = localStorage.getItem(MONITOR_KEY);
+      select.innerHTML = monitors.map(monitor =>
+        `<option value="${monitor.id}">${monitor.label} (${monitor.width}x${monitor.height})</option>`
+      ).join("");
+
+      if (!monitors.length) {
+        return;
+      }
+
+      const valid = monitors.some(monitor => String(monitor.id) === saved);
+      if (valid) {
+        select.value = saved;
+        await fetch("/api/monitor/" + saved, { method: "POST" });
+        return;
+      }
+
+      const statusRes = await fetch("/api/status");
+      const status = await statusRes.json();
+      if (status.monitor != null) {
+        select.value = String(status.monitor);
+      }
+    }
+
+    document.getElementById("monitor").addEventListener("change", async (event) => {
+      localStorage.setItem(MONITOR_KEY, event.target.value);
+      await fetch("/api/monitor/" + event.target.value, { method: "POST" });
+    });
+
+    document.getElementById("start-shots").addEventListener("click", async () => {
+      await fetch("/api/archive/start", { method: "POST" });
+      setArchivingButtons(true);
+      refreshStatus();
+    });
+
+    document.getElementById("stop-shots").addEventListener("click", async () => {
+      await fetch("/api/archive/stop", { method: "POST" });
+      setArchivingButtons(false);
+      refreshStatus();
+    });
+
+    document.getElementById("save").addEventListener("click", async () => {
+      await fetch("/api/save", { method: "POST" });
+      refreshGallery();
+      refreshStatus();
+    });
+
+    async function refreshTrain() {
+      const res = await fetch("/api/train/session");
+      const data = await res.json();
+      trainImages = data.images || [];
+      document.getElementById("class-name").value = data.class_name || "hammer";
+      document.getElementById("image-count").textContent =
+        data.counts.labelled + " / " + data.counts.total + " images boxed";
+      renderThumbs();
+      if (!currentId && trainImages.length) {
+        selectImage(trainImages[0].id);
+      } else if (currentId) {
+        const still = trainImages.find(item => item.id === currentId);
+        if (still) {
+          currentBox = still.box;
+          drawBox();
+        } else {
+          currentId = null;
+          showEmpty();
+        }
+      } else {
+        showEmpty();
+      }
+      updateTrainJob(data.job);
+    }
+
+    function renderThumbs() {
+      const thumbs = document.getElementById("thumbs");
+      thumbs.innerHTML = trainImages.map(item => `
+        <div class="thumb ${item.id === currentId ? "selected" : ""}" data-id="${item.id}">
+          <img src="${item.url}" alt="${item.id}">
+          <span class="badge ${item.labelled ? "ok" : ""}">${item.labelled ? "BOXED" : "NO BOX"}</span>
+        </div>
+      `).join("");
+      thumbs.querySelectorAll(".thumb").forEach(thumb => {
+        thumb.addEventListener("click", () => selectImage(thumb.dataset.id));
+      });
+    }
+
+    function showEmpty() {
+      document.getElementById("anno-empty").hidden = false;
+      document.getElementById("anno-wrap").hidden = true;
+    }
+
+    function selectImage(id) {
+      currentId = id;
+      const item = trainImages.find(image => image.id === id);
+      if (!item) {
+        showEmpty();
+        return;
+      }
+      currentBox = item.box;
+      const img = document.getElementById("anno-img");
+      document.getElementById("anno-empty").hidden = true;
+      document.getElementById("anno-wrap").hidden = false;
+      img.onload = () => {
+        sizeCanvas();
+        drawBox();
+      };
+      img.src = item.url + "?t=" + Date.now();
+      renderThumbs();
+    }
+
+    function sizeCanvas() {
+      const canvas = document.getElementById("anno-canvas");
+      const img = document.getElementById("anno-img");
+      const rect = img.getBoundingClientRect();
+      canvas.width = Math.max(1, Math.round(rect.width));
+      canvas.height = Math.max(1, Math.round(rect.height));
+    }
+
+    function toImagePoint(event) {
+      const canvas = document.getElementById("anno-canvas");
+      const img = document.getElementById("anno-img");
+      const rect = canvas.getBoundingClientRect();
+      const x = (event.clientX - rect.left) * (img.naturalWidth / rect.width);
+      const y = (event.clientY - rect.top) * (img.naturalHeight / rect.height);
+      return {
+        x: Math.max(0, Math.min(img.naturalWidth, x)),
+        y: Math.max(0, Math.min(img.naturalHeight, y))
+      };
+    }
+
+    function drawBox() {
+      const canvas = document.getElementById("anno-canvas");
+      const img = document.getElementById("anno-img");
+      const ctx = canvas.getContext("2d");
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      if (!currentBox || !img.naturalWidth) return;
+      const sx = canvas.width / img.naturalWidth;
+      const sy = canvas.height / img.naturalHeight;
+      const x = currentBox[0] * sx;
+      const y = currentBox[1] * sy;
+      const w = (currentBox[2] - currentBox[0]) * sx;
+      const h = (currentBox[3] - currentBox[1]) * sy;
+      ctx.strokeStyle = "#3dd68c";
+      ctx.lineWidth = 3;
+      ctx.strokeRect(x, y, w, h);
+      ctx.fillStyle = "rgba(61, 214, 140, 0.15)";
+      ctx.fillRect(x, y, w, h);
+    }
+
+    const canvas = document.getElementById("anno-canvas");
+    canvas.addEventListener("mousedown", (event) => {
+      if (!currentId) return;
+      drawing = true;
+      dragStart = toImagePoint(event);
+      currentBox = [dragStart.x, dragStart.y, dragStart.x, dragStart.y];
+      drawBox();
+    });
+    window.addEventListener("mousemove", (event) => {
+      if (!drawing) return;
+      const point = toImagePoint(event);
+      currentBox = [dragStart.x, dragStart.y, point.x, point.y];
+      drawBox();
+    });
+    window.addEventListener("mouseup", async () => {
+      if (!drawing) return;
+      drawing = false;
+      if (!currentId || !currentBox) return;
+      await fetch("/api/train/images/" + currentId + "/box", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          x1: currentBox[0],
+          y1: currentBox[1],
+          x2: currentBox[2],
+          y2: currentBox[3]
+        })
+      });
+      refreshTrain();
+    });
+    window.addEventListener("resize", () => {
+      sizeCanvas();
+      drawBox();
+    });
+
+    document.getElementById("file-input").addEventListener("change", async (event) => {
+      const files = event.target.files;
+      if (!files.length) return;
+      const form = new FormData();
+      for (const file of files) {
+        form.append("files", file);
+      }
+      await fetch("/api/train/images", { method: "POST", body: form });
+      event.target.value = "";
+      await refreshTrain();
+      if (!currentId && trainImages.length) {
+        selectImage(trainImages[trainImages.length - 1].id);
+      }
+    });
+
+    document.getElementById("grab-live").addEventListener("click", async () => {
+      const res = await fetch("/api/train/grab-live", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error || "Could not grab live frame.");
+        return;
+      }
+      await refreshTrain();
+      selectImage(data.id);
+    });
+
+    document.getElementById("class-name").addEventListener("change", async () => {
+      await fetch("/api/train/class", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ class_name: document.getElementById("class-name").value })
+      });
+    });
+
+    document.getElementById("delete-image").addEventListener("click", async () => {
+      if (!currentId) return;
+      await fetch("/api/train/images/" + currentId, { method: "DELETE" });
+      currentId = null;
+      currentBox = null;
+      refreshTrain();
+    });
+
+    document.getElementById("train-btn").addEventListener("click", async () => {
+      const res = await fetch("/api/train/start", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          class_name: document.getElementById("class-name").value,
+          epochs: Number(document.getElementById("epochs").value || 15)
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error || "Could not start training.");
+        return;
+      }
+      updateTrainJob(data);
+    });
+
+    function updateTrainJob(job) {
+      if (!job) return;
+      const status = document.getElementById("train-status");
+      const log = document.getElementById("train-log");
+      const btn = document.getElementById("train-btn");
+      status.textContent = (job.status || "idle").toUpperCase() + " — " + (job.message || "");
+      log.textContent = (job.logs || []).join("\n");
+      log.scrollTop = log.scrollHeight;
+      btn.disabled = job.status === "running";
+    }
+
+    setArchivingButtons(false);
+    loadMonitors();
+    refreshStatus();
+    refreshGallery();
+    showPage(startPage);
+    setInterval(refreshStatus, 1000);
+    setInterval(refreshGallery, 4000);
+    setInterval(() => {
+      if (!document.getElementById("page-train").hidden && !drawing) {
+        refreshTrain();
+      }
+    }, 1500);
+  </script>
+</body>
+</html>
